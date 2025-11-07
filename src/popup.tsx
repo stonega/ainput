@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 
-const Popup = () => {
+export const Popup = () => {
   const [currentOrigin, setCurrentOrigin] = useState<string>();
   const [activeTabId, setActiveTabId] = useState<number>();
   const [isDisabled, setIsDisabled] = useState<boolean | null>(null);
@@ -172,10 +172,14 @@ const Popup = () => {
   );
 };
 
-const root = createRoot(document.getElementById("root")!);
-
-root.render(
-  <React.StrictMode>
-    <Popup />
-  </React.StrictMode>
-);
+if (typeof document !== 'undefined') {
+    const container = document.getElementById("root");
+    if (container) {
+        const root = createRoot(container);
+        root.render(
+            <React.StrictMode>
+                <Popup />
+            </React.StrictMode>
+        );
+    }
+}
