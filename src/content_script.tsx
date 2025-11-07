@@ -26,14 +26,14 @@ const ButtonContainer: React.FC<ButtonContainerProps> = ({
   const buttonStyle: React.CSSProperties = {
     display: "flex",
     alignItems: "center",
-    gap: "8px",
-    padding: "8px 12px",
+    gap: "4px",
+    padding: "4px 6px",
     backgroundColor: "transparent",
     color: "#333",
     border: "none",
     borderRadius: "6px",
     fontSize: "14px",
-    fontWeight: "500",
+    fontWeight: "400",
     textAlign: "left",
     transition: "background-color 0.2s",
   };
@@ -43,8 +43,8 @@ const ButtonContainer: React.FC<ButtonContainerProps> = ({
       style={{
         display: "flex",
         flexDirection: "column",
-        gap: "8px",
-        padding: "4px",
+        gap: "4px",
+        padding: "2px",
       }}
     >
       <button
@@ -156,7 +156,7 @@ const InputAccessory: React.FC<{
           backgroundColor: "#2196F3",
           borderRadius: "50%",
           cursor: "pointer",
-          animation: loading ? "pulse 1.5s infinite" : "none",
+          animation: loading ? "ainput-pulse 1.5s infinite" : "none",
         }}
       />
       {popoverVisible && (
@@ -344,7 +344,7 @@ document.addEventListener(
 
 const style = document.createElement("style");
 style.textContent = `
-  @keyframes pulse {
+  @keyframes ainput-pulse {
     0% {
       transform: scale(0.95);
       box-shadow: 0 0 0 0 rgba(16, 97, 127, 0.77);

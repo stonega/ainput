@@ -83,61 +83,90 @@ const Popup = () => {
     });
   };
 
+  const isLoading =
+    isDisabled === null || !currentOrigin || activeTabId === undefined;
+
+  const containerStyle: React.CSSProperties = {
+    fontFamily:
+      '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"',
+    padding: "20px",
+    minWidth: "280px",
+    textAlign: "center",
+    backgroundColor: "#ffffff",
+    color: "#333",
+  };
+
+  const titleStyle: React.CSSProperties = {
+    fontSize: "20px",
+    fontWeight: 600,
+    color: "#2196F3",
+    margin: "0 0 10px 0",
+  };
+
+  const descriptionStyle: React.CSSProperties = {
+    fontSize: "14px",
+    marginBottom: "20px",
+    lineHeight: "1.5",
+    color: "#555",
+  };
+
+  const labelStyle: React.CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    cursor: isLoading ? "not-allowed" : "pointer",
+    opacity: isLoading ? 0.6 : 1,
+  };
+
+  const toggleSwitchStyle: React.CSSProperties = {
+    position: "relative",
+    width: "44px",
+    height: "24px",
+    backgroundColor: isDisabled ? "#bdc3c7" : "#2196F3",
+    borderRadius: "12px",
+    transition: "background-color 0.2s ease-in-out",
+  };
+
+  const toggleKnobStyle: React.CSSProperties = {
+    position: "absolute",
+    top: "2px",
+    left: isDisabled ? "2px" : "22px",
+    width: "20px",
+    height: "20px",
+    backgroundColor: "white",
+    borderRadius: "50%",
+    transition: "left 0.2s ease-in-out",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+  };
+
+  const statusTextStyle: React.CSSProperties = {
+    marginLeft: "12px",
+    userSelect: "none",
+    fontSize: "14px",
+    fontWeight: 500,
+    color: isDisabled ? "#7f8c8d" : "#2c3e50",
+  };
+
   return (
-    <div style={{ padding: "16px", minWidth: "250px", textAlign: "center" }}>
-      <p style={{ fontSize: "14px", color: "#333", marginBottom: "12px" }}>
+    <div style={containerStyle}>
+      <h1 style={titleStyle}>AINPUT</h1>
+      <p style={descriptionStyle}>
         Control whether the extension is active on{" "}
         <strong>{currentOrigin || "this page"}</strong>.
       </p>
-      <label
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          cursor:
-            isDisabled === null || !currentOrigin || activeTabId === undefined
-              ? "not-allowed"
-              : "pointer",
-          opacity:
-            isDisabled === null || !currentOrigin || activeTabId === undefined
-              ? 0.6
-              : 1,
-        }}
-      >
+      <label style={labelStyle}>
         <input
           type="checkbox"
           checked={!isDisabled}
           onChange={handleToggleExtension}
-          disabled={
-            isDisabled === null || !currentOrigin || activeTabId === undefined
-          }
+          disabled={isLoading}
           style={{ display: "none" }}
         />
-        <span
-          style={{
-            position: "relative",
-            width: "50px",
-            height: "26px",
-            backgroundColor: isDisabled ? "#ccc" : "#28a745",
-            borderRadius: "13px",
-            transition: "background-color 0.2s",
-          }}
-        >
-          <span
-            style={{
-              position: "absolute",
-              top: "2px",
-              left: isDisabled ? "2px" : "26px",
-              width: "22px",
-              height: "22px",
-              backgroundColor: "white",
-              borderRadius: "50%",
-              transition: "left 0.2s",
-            }}
-          ></span>
+        <span style={toggleSwitchStyle}>
+          <span style={toggleKnobStyle}></span>
         </span>
-        <span style={{ marginLeft: "10px", userSelect: "none" }}>
-          {isDisabled === null ? "Loading..." : isDisabled ? "Disabled" : "Enabled"}
-        </span>
+        {/* <span style={statusTextStyle}>
+          {isLoading ? "Loading..." : isDisabled ? "Disabled" : "Enabled"}
+        </span> */}
       </label>
     </div>
   );
