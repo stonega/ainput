@@ -2,29 +2,21 @@ import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 const Popup = () => {
-  const [count, setCount] = useState(0);
-  const [currentURL, setCurrentURL] = useState<string>();
   const [currentOrigin, setCurrentOrigin] = useState<string>();
   const [activeTabId, setActiveTabId] = useState<number>();
   const [isDisabled, setIsDisabled] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    chrome.action.setBadgeText({ text: count.toString() });
-  }, [count]);
 
   useEffect(() => {
     chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
       const tab = tabs[0];
 
       if (!tab || !tab.url) {
-        setCurrentURL(undefined);
         setCurrentOrigin(undefined);
         setActiveTabId(undefined);
         setIsDisabled(null);
         return;
       }
 
-      setCurrentURL(tab.url);
       setActiveTabId(tab.id);
 
       try {
@@ -43,23 +35,6 @@ const Popup = () => {
       }
     });
   }, []);
-
-  const changeBackground = () => {
-    chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
-      const tab = tabs[0];
-      if (tab.id) {
-        chrome.tabs.sendMessage(
-          tab.id,
-          {
-            color: "#555555",
-          },
-          (msg) => {
-            console.log("result message:", msg);
-          }
-        );
-      }
-    });
-  };
 
   const handleToggleExtension = () => {
     if (!currentOrigin || activeTabId === undefined || isDisabled === null) {
@@ -109,35 +84,62 @@ const Popup = () => {
   };
 
   return (
-    <>
-      <ul style={{ minWidth: "700px" }}>
-        <li>Current URL: {currentURL}</li>
-        <li>Current Time: {new Date().toLocaleTimeString()}</li>
-        <li>
-          Extension on this page:{" "}
-          {isDisabled === null
-            ? "Loading..."
-            : isDisabled
-            ? "Disabled"
-            : "Enabled"}
-        </li>
-      </ul>
-      <button
-        onClick={() => setCount(count + 1)}
-        style={{ marginRight: "5px" }}
+    <div style={{ padding: "16px", minWidth: "250px", textAlign: "center" }}>
+      <p style={{ fontSize: "14px", color: "#333", marginBottom: "12px" }}>
+        Control whether the extension is active on{" "}
+        <strong>{currentOrigin || "this page"}</strong>.
+      </p>
+      <label
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          cursor:
+            isDisabled === null || !currentOrigin || activeTabId === undefined
+              ? "not-allowed"
+              : "pointer",
+          opacity:
+            isDisabled === null || !currentOrigin || activeTabId === undefined
+              ? 0.6
+              : 1,
+        }}
       >
-        count up
-      </button>
-      <button onClick={changeBackground} style={{ marginRight: "5px" }}>
-        change background
-      </button>
-      <button
-        onClick={handleToggleExtension}
-        disabled={isDisabled === null || !currentOrigin || activeTabId === undefined}
-      >
-        {isDisabled ? "Enable on this page" : "Disable on this page"}
-      </button>
-    </>
+        <input
+          type="checkbox"
+          checked={!isDisabled}
+          onChange={handleToggleExtension}
+          disabled={
+            isDisabled === null || !currentOrigin || activeTabId === undefined
+          }
+          style={{ display: "none" }}
+        />
+        <span
+          style={{
+            position: "relative",
+            width: "50px",
+            height: "26px",
+            backgroundColor: isDisabled ? "#ccc" : "#28a745",
+            borderRadius: "13px",
+            transition: "background-color 0.2s",
+          }}
+        >
+          <span
+            style={{
+              position: "absolute",
+              top: "2px",
+              left: isDisabled ? "2px" : "26px",
+              width: "22px",
+              height: "22px",
+              backgroundColor: "white",
+              borderRadius: "50%",
+              transition: "left 0.2s",
+            }}
+          ></span>
+        </span>
+        <span style={{ marginLeft: "10px", userSelect: "none" }}>
+          {isDisabled === null ? "Loading..." : isDisabled ? "Disabled" : "Enabled"}
+        </span>
+      </label>
+    </div>
   );
 };
 
