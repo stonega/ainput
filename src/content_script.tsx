@@ -1,5 +1,8 @@
 import React from "react";
-import { createRoot } from "react-dom/client";
+import { createRoot, Root } from "react-dom/client";
+
+const DISABLED_SITES_KEY = "disabledSites";
+const CURRENT_ORIGIN = window.location.origin;
 
 interface ButtonContainerProps {
   onFixGrammar: () => void;
@@ -65,11 +68,87 @@ const ButtonContainer: React.FC<ButtonContainerProps> = ({
   );
 };
 
-// Track processed inputs to avoid duplicate button containers
-const processedInputs = new WeakSet<HTMLElement>();
+let isEnabled = false;
+let processedInputs = new WeakSet<HTMLElement>();
+let observer: MutationObserver | null = null;
+const containerRoots = new WeakMap<HTMLElement, Root>();
+
+function removeButtonContainers() {
+  document
+    .querySelectorAll<HTMLElement>(".ai-text-enhancer-buttons")
+    .forEach((node) => {
+      const root = containerRoots.get(node);
+      root?.unmount();
+      containerRoots.delete(node);
+      node.remove();
+    });
+}
+
+function ensureObserver() {
+  if (observer) {
+    return;
+  }
+
+  if (!document.body) {
+    window.addEventListener(
+      "DOMContentLoaded",
+      () => {
+        if (!observer && isEnabled) {
+          ensureObserver();
+          processTextInputs();
+        }
+      },
+      { once: true }
+    );
+    return;
+  }
+
+  observer = new MutationObserver(() => {
+    if (!isEnabled) {
+      return;
+    }
+    processTextInputs();
+  });
+
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+  });
+}
+
+function setExtensionEnabled(enabled: boolean) {
+  if (isEnabled === enabled) {
+    if (enabled) {
+      ensureObserver();
+      processTextInputs();
+    }
+    return;
+  }
+
+  isEnabled = enabled;
+
+  if (enabled) {
+    processedInputs = new WeakSet();
+    ensureObserver();
+    processTextInputs();
+  } else {
+    observer?.disconnect();
+    observer = null;
+    removeButtonContainers();
+    processedInputs = new WeakSet();
+  }
+}
+
+function initializeExtensionState() {
+  chrome.storage.sync.get([DISABLED_SITES_KEY], (items) => {
+    const disabledSites: string[] = items[DISABLED_SITES_KEY] || [];
+    const shouldEnable = !disabledSites.includes(CURRENT_ORIGIN);
+    setExtensionEnabled(shouldEnable);
+  });
+}
 
 function createButtonContainer(inputElement: HTMLInputElement | HTMLTextAreaElement) {
-  if (processedInputs.has(inputElement)) {
+  if (!isEnabled || processedInputs.has(inputElement)) {
     return;
   }
   processedInputs.add(inputElement);
@@ -83,7 +162,13 @@ function createButtonContainer(inputElement: HTMLInputElement | HTMLTextAreaElem
 
   let loading = false;
 
+  const root = createRoot(container);
+  containerRoots.set(container, root);
+
   const updateUI = () => {
+    if (!isEnabled) {
+      return;
+    }
     root.render(
       <ButtonContainer
         onFixGrammar={() => handleFixGrammar(inputElement)}
@@ -93,7 +178,6 @@ function createButtonContainer(inputElement: HTMLInputElement | HTMLTextAreaElem
     );
   };
 
-  const root = createRoot(container);
   updateUI();
 
   async function handleFixGrammar(element: HTMLInputElement | HTMLTextAreaElement) {
@@ -107,10 +191,10 @@ function createButtonContainer(inputElement: HTMLInputElement | HTMLTextAreaElem
     updateUI();
 
     try {
-      const response = await chrome.runtime.sendMessage({
+      const response = (await chrome.runtime.sendMessage({
         action: "fixGrammar",
         text: text,
-      }) as unknown as MessageResponse;
+      })) as unknown as MessageResponse;
 
       if (response && response.success) {
         element.value = response.result || text;
@@ -138,10 +222,10 @@ function createButtonContainer(inputElement: HTMLInputElement | HTMLTextAreaElem
     updateUI();
 
     try {
-      const response = await chrome.runtime.sendMessage({
+      const response = (await chrome.runtime.sendMessage({
         action: "translate",
         text: text,
-      }) as unknown as MessageResponse;
+      })) as unknown as MessageResponse;
 
       if (response && response.success) {
         element.value = response.result || text;
@@ -159,32 +243,41 @@ function createButtonContainer(inputElement: HTMLInputElement | HTMLTextAreaElem
   }
 }
 
-// Function to process all text inputs and textareas
 function processTextInputs() {
-  const inputs = document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
-    'input[type="text"], input:not([type]), textarea'
-  );
-  
+  if (!isEnabled) {
+    return;
+  }
+
+  const inputs =
+    document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
+      'input[type="text"], input:not([type]), textarea'
+    );
+
   inputs.forEach((input) => {
-    // Skip if already processed or if it's too small or hidden
     if (processedInputs.has(input)) return;
-    
+
     const style = window.getComputedStyle(input);
     if (style.display === "none" || style.visibility === "hidden") return;
-    
+
     createButtonContainer(input);
   });
 }
 
-// Initial processing
-processTextInputs();
+initializeExtensionState();
 
-// Watch for dynamically added inputs
-const observer = new MutationObserver((mutations) => {
-  processTextInputs();
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message.action === "setExtensionEnabled") {
+    setExtensionEnabled(Boolean(message.enabled));
+    sendResponse({ success: true });
+  }
 });
 
-observer.observe(document.body, {
-  childList: true,
-  subtree: true,
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== "sync" || !changes[DISABLED_SITES_KEY]) {
+    return;
+  }
+
+  const newValue: string[] = changes[DISABLED_SITES_KEY].newValue || [];
+  const shouldEnable = !newValue.includes(CURRENT_ORIGIN);
+  setExtensionEnabled(shouldEnable);
 });
