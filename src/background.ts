@@ -74,7 +74,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 async function handleFixGrammar(text: string): Promise<string> {
   // Get API key from storage
   const settings = await chrome.storage.sync.get(["apiKey"]);
-  
+
   if (!settings.apiKey) {
     throw new Error("Please set your Gemini API key in the extension options.");
   }
@@ -87,7 +87,7 @@ async function handleFixGrammar(text: string): Promise<string> {
 async function handleTranslate(text: string): Promise<string> {
   // Get API key and target language from storage
   const settings = await chrome.storage.sync.get(["apiKey", "targetLanguage"]);
-  
+
   if (!settings.apiKey) {
     throw new Error("Please set your Gemini API key in the extension options.");
   }

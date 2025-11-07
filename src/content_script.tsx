@@ -60,7 +60,9 @@ const ButtonContainer: React.FC<ButtonContainerProps> = ({
         }}
       >
         <MdAutoFixHigh size={16} />
-        <span style={{ whiteSpace: "nowrap" }}>{loading ? "Processing..." : "Fix Grammar"}</span>
+        <span style={{ whiteSpace: "nowrap" }}>
+          {loading ? "Processing..." : "Fix Grammar"}
+        </span>
       </button>
       <button
         onClick={onTranslate}
@@ -183,7 +185,10 @@ const InputAccessory: React.FC<{
   );
 };
 
-function getCaretCoordinates(element: HTMLInputElement | HTMLTextAreaElement, position: number) {
+function getCaretCoordinates(
+  element: HTMLInputElement | HTMLTextAreaElement,
+  position: number
+) {
   const isInput = element.tagName.toLowerCase() === "input";
   const debug = false;
   const div = document.createElement("div");
@@ -230,13 +235,13 @@ function getCaretCoordinates(element: HTMLInputElement | HTMLTextAreaElement, po
     "wordSpacing",
   ];
 
-  properties.forEach(prop => {
+  properties.forEach((prop) => {
     style[prop as any] = computed[prop as any];
   });
 
   if (debug) {
     style.backgroundColor = "#aaa";
-    style.position = 'absolute';
+    style.position = "absolute";
     style.top = `${element.offsetTop}px`;
     style.left = `${element.offsetLeft}px`;
   } else {
@@ -257,14 +262,13 @@ function getCaretCoordinates(element: HTMLInputElement | HTMLTextAreaElement, po
   const coordinates = {
     top: span.offsetTop + parseInt(computed.borderTopWidth),
     left: span.offsetLeft + parseInt(computed.borderLeftWidth),
-    height: span.offsetHeight
+    height: span.offsetHeight,
   };
 
   document.body.removeChild(div);
 
   return coordinates;
 }
-
 
 function positionAccessory(
   inputElement: HTMLInputElement | HTMLTextAreaElement,
@@ -275,7 +279,8 @@ function positionAccessory(
   const coords = getCaretCoordinates(inputElement, caretPos);
 
   const top = window.scrollY + rect.top + coords.top - inputElement.scrollTop;
-  const left = window.scrollX + rect.left + coords.left - inputElement.scrollLeft;
+  const left =
+    window.scrollX + rect.left + coords.left - inputElement.scrollLeft;
 
   container.style.position = "absolute";
   container.style.top = `${top}px`;
@@ -332,10 +337,7 @@ document.addEventListener(
   "focusout",
   (event) => {
     const relatedTarget = event.relatedTarget as HTMLElement;
-    if (
-      !accessoryContainer ||
-      !accessoryContainer.contains(relatedTarget)
-    ) {
+    if (!accessoryContainer || !accessoryContainer.contains(relatedTarget)) {
       hideAccessory();
     }
   },

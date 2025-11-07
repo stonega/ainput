@@ -172,14 +172,14 @@ export const Popup = () => {
   );
 };
 
-if (typeof document !== 'undefined') {
-    const container = document.getElementById("root");
-    if (container) {
-        const root = createRoot(container);
-        root.render(
-            <React.StrictMode>
-                <Popup />
-            </React.StrictMode>
-        );
-    }
+if (typeof document !== "undefined") {
+  const container = document.getElementById("root");
+  if (container) {
+    const root = createRoot(container);
+    root.render(
+      <React.StrictMode>
+        <Popup />
+      </React.StrictMode>
+    );
+  }
 }
