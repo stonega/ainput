@@ -8,13 +8,14 @@
     "build": "webpack --config webpack/webpack.prod.js",
     "clean": "rimraf dist",
     "test": "npx jest",
-    "style": "prettier --write \"src/**/*.{ts,tsx}\""
+    "style": "prettier --write \"src/**/*.{ts,tsx}\"",
+    "pack": "bestzip dist.zip dist/*"
   },
   "author": "Stone",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/stonego/ainput.git"
+    "url": "https://github.com/stonega/ainput.git"
   },
   "dependencies": {
     "react": "^18.2.0",
@@ -28,6 +29,7 @@
     "@types/jest": "^29.5.0",
     "@types/react": "^18.0.29",
     "@types/react-dom": "^18.0.11",
+    "bestzip": "^2.2.1",
     "copy-webpack-plugin": "^9.0.1",
     "glob": "^7.1.6",
     "identity-obj-proxy": "^3.0.0",
