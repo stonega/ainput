@@ -176,15 +176,36 @@ function processTextInputs() {
   });
 }
 
-// Initial processing
-processTextInputs();
+// Check if extension is disabled for current site before initializing
+async function initializeContentScript() {
+  const hostname = window.location.hostname;
+  
+  return new Promise<boolean>((resolve) => {
+    chrome.storage.sync.get(['disabledSites'], (result) => {
+      const disabledSites = result.disabledSites || [];
+      const isDisabled = disabledSites.includes(hostname);
+      resolve(!isDisabled);
+    });
+  });
+}
 
-// Watch for dynamically added inputs
-const observer = new MutationObserver((mutations) => {
+// Initialize only if extension is enabled for this site
+initializeContentScript().then((shouldRun) => {
+  if (!shouldRun) {
+    console.log('AI Text Enhancer: Extension disabled for this site');
+    return;
+  }
+  
+  // Initial processing
   processTextInputs();
-});
 
-observer.observe(document.body, {
-  childList: true,
-  subtree: true,
+  // Watch for dynamically added inputs
+  const observer = new MutationObserver((mutations) => {
+    processTextInputs();
+  });
+
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+  });
 });
