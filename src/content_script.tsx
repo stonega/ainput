@@ -3,8 +3,6 @@ import { createRoot } from "react-dom/client";
 import { MdTranslate } from "react-icons/md";
 import { MdAutoFixHigh } from "react-icons/md";
 
-
-
 interface ButtonContainerProps {
   onFixGrammar: () => void;
   onTranslate: () => void;
@@ -62,7 +60,7 @@ const ButtonContainer: React.FC<ButtonContainerProps> = ({
         }}
       >
         <MdAutoFixHigh size={16} />
-        <span>{loading ? "Processing..." : "Fix Grammar"}</span>
+        <span style={{ whiteSpace: "nowrap" }}>{loading ? "Processing..." : "Fix Grammar"}</span>
       </button>
       <button
         onClick={onTranslate}
