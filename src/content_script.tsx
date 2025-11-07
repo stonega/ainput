@@ -1,8 +1,9 @@
 import React from "react";
-import { createRoot, Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import { MdTranslate } from "react-icons/md";
+import { MdAutoFixHigh } from "react-icons/md";
 
-const DISABLED_SITES_KEY = "disabledSites";
-const CURRENT_ORIGIN = window.location.origin;
+
 
 interface ButtonContainerProps {
   onFixGrammar: () => void;
@@ -21,263 +22,343 @@ const ButtonContainer: React.FC<ButtonContainerProps> = ({
   onTranslate,
   loading,
 }) => {
+  const [hoverFix, setHoverFix] = React.useState(false);
+  const [hoverTranslate, setHoverTranslate] = React.useState(false);
+
+  const buttonStyle: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    padding: "8px 12px",
+    backgroundColor: "transparent",
+    color: "#333",
+    border: "none",
+    borderRadius: "6px",
+    fontSize: "14px",
+    fontWeight: "500",
+    textAlign: "left",
+    transition: "background-color 0.2s",
+  };
+
   return (
     <div
       style={{
         display: "flex",
+        flexDirection: "column",
         gap: "8px",
-        marginTop: "4px",
-        marginBottom: "4px",
+        padding: "4px",
       }}
     >
       <button
         onClick={onFixGrammar}
         disabled={loading}
+        onMouseEnter={() => setHoverFix(true)}
+        onMouseLeave={() => setHoverFix(false)}
         style={{
-          padding: "6px 12px",
-          backgroundColor: "#4CAF50",
-          color: "white",
-          border: "none",
-          borderRadius: "4px",
+          ...buttonStyle,
+          backgroundColor: hoverFix ? "#f0f0f0" : "transparent",
           cursor: loading ? "not-allowed" : "pointer",
-          fontSize: "12px",
-          fontWeight: "500",
           opacity: loading ? 0.6 : 1,
         }}
       >
-        {loading ? "Processing..." : "Fix Grammar"}
+        <MdAutoFixHigh size={16} />
+        <span>{loading ? "Processing..." : "Fix Grammar"}</span>
       </button>
       <button
         onClick={onTranslate}
         disabled={loading}
+        onMouseEnter={() => setHoverTranslate(true)}
+        onMouseLeave={() => setHoverTranslate(false)}
         style={{
-          padding: "6px 12px",
-          backgroundColor: "#2196F3",
-          color: "white",
-          border: "none",
-          borderRadius: "4px",
+          ...buttonStyle,
+          backgroundColor: hoverTranslate ? "#f0f0f0" : "transparent",
           cursor: loading ? "not-allowed" : "pointer",
-          fontSize: "12px",
-          fontWeight: "500",
           opacity: loading ? 0.6 : 1,
         }}
       >
-        {loading ? "Processing..." : "Translate"}
+        <MdTranslate size={16} />
+        <span>{loading ? "Processing..." : "Translate"}</span>
       </button>
     </div>
   );
 };
 
-let isEnabled = false;
-let processedInputs = new WeakSet<HTMLElement>();
-let observer: MutationObserver | null = null;
-const containerRoots = new WeakMap<HTMLElement, Root>();
+let activeInput: HTMLInputElement | HTMLTextAreaElement | null = null;
+let accessoryContainer: HTMLDivElement | null = null;
 
-function removeButtonContainers() {
-  document
-    .querySelectorAll<HTMLElement>(".ai-text-enhancer-buttons")
-    .forEach((node) => {
-      const root = containerRoots.get(node);
-      root?.unmount();
-      containerRoots.delete(node);
-      node.remove();
-    });
-}
+const InputAccessory: React.FC<{
+  inputElement: HTMLInputElement | HTMLTextAreaElement;
+}> = ({ inputElement }) => {
+  const [popoverVisible, setPopoverVisible] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
+  const accessoryRef = React.useRef<HTMLDivElement>(null);
 
-function ensureObserver() {
-  if (observer) {
-    return;
-  }
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        accessoryRef.current &&
+        !accessoryRef.current.contains(event.target as Node)
+      ) {
+        setPopoverVisible(false);
+      }
+    };
 
-  if (!document.body) {
-    window.addEventListener(
-      "DOMContentLoaded",
-      () => {
-        if (!observer && isEnabled) {
-          ensureObserver();
-          processTextInputs();
-        }
-      },
-      { once: true }
-    );
-    return;
-  }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
-  observer = new MutationObserver(() => {
-    if (!isEnabled) {
+  const handleAction = async (
+    action: "fixGrammar" | "translate",
+    element: HTMLInputElement | HTMLTextAreaElement
+  ) => {
+    const text = element.value;
+    if (!text.trim()) {
+      alert("Please enter some text first.");
       return;
     }
-    processTextInputs();
-  });
 
-  observer.observe(document.body, {
-    childList: true,
-    subtree: true,
-  });
-}
+    setPopoverVisible(false);
+    setLoading(true);
 
-function setExtensionEnabled(enabled: boolean) {
-  if (isEnabled === enabled) {
-    if (enabled) {
-      ensureObserver();
-      processTextInputs();
+    try {
+      const response = (await chrome.runtime.sendMessage({
+        action,
+        text,
+      })) as unknown as MessageResponse;
+
+      if (response && response.success) {
+        element.value = response.result || text;
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+      } else {
+        alert("Error: " + (response?.error || `Failed to ${action}`));
+      }
+    } catch (error) {
+      alert("Error: " + error);
+    } finally {
+      setLoading(false);
     }
-    return;
-  }
-
-  isEnabled = enabled;
-
-  if (enabled) {
-    processedInputs = new WeakSet();
-    ensureObserver();
-    processTextInputs();
-  } else {
-    observer?.disconnect();
-    observer = null;
-    removeButtonContainers();
-    processedInputs = new WeakSet();
-  }
-}
-
-function initializeExtensionState() {
-  chrome.storage.sync.get([DISABLED_SITES_KEY], (items) => {
-    const disabledSites: string[] = items[DISABLED_SITES_KEY] || [];
-    const shouldEnable = !disabledSites.includes(CURRENT_ORIGIN);
-    setExtensionEnabled(shouldEnable);
-  });
-}
-
-function createButtonContainer(inputElement: HTMLInputElement | HTMLTextAreaElement) {
-  if (!isEnabled || processedInputs.has(inputElement)) {
-    return;
-  }
-  processedInputs.add(inputElement);
-
-  const container = document.createElement("div");
-  container.className = "ai-text-enhancer-buttons";
-  container.style.cssText = "margin: 0; padding: 0;";
-
-  // Insert after the input element
-  inputElement.parentNode?.insertBefore(container, inputElement.nextSibling);
-
-  let loading = false;
-
-  const root = createRoot(container);
-  containerRoots.set(container, root);
-
-  const updateUI = () => {
-    if (!isEnabled) {
-      return;
-    }
-    root.render(
-      <ButtonContainer
-        onFixGrammar={() => handleFixGrammar(inputElement)}
-        onTranslate={() => handleTranslate(inputElement)}
-        loading={loading}
-      />
-    );
   };
 
-  updateUI();
+  const onFixGrammar = () => handleAction("fixGrammar", inputElement);
+  const onTranslate = () => handleAction("translate", inputElement);
 
-  async function handleFixGrammar(element: HTMLInputElement | HTMLTextAreaElement) {
-    const text = element.value;
-    if (!text.trim()) {
-      alert("Please enter some text first.");
-      return;
-    }
+  return (
+    <div
+      ref={accessoryRef}
+      style={{ position: "relative" }}
+      onMouseDown={(e) => e.preventDefault()}
+    >
+      <div
+        onClick={() => setPopoverVisible(!popoverVisible)}
+        style={{
+          width: "12px",
+          height: "12px",
+          backgroundColor: "#2196F3",
+          borderRadius: "50%",
+          cursor: "pointer",
+          animation: loading ? "pulse 1.5s infinite" : "none",
+        }}
+      />
+      {popoverVisible && (
+        <div
+          style={{
+            position: "absolute",
+            top: "16px",
+            left: "0px",
+            zIndex: 10000,
+            background: "white",
+            borderRadius: "8px",
+            boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
+            padding: "4px",
+          }}
+        >
+          <ButtonContainer
+            onFixGrammar={onFixGrammar}
+            onTranslate={onTranslate}
+            loading={loading}
+          />
+        </div>
+      )}
+    </div>
+  );
+};
 
-    loading = true;
-    updateUI();
+function getCaretCoordinates(element: HTMLInputElement | HTMLTextAreaElement, position: number) {
+  const isInput = element.tagName.toLowerCase() === "input";
+  const debug = false;
+  const div = document.createElement("div");
+  document.body.appendChild(div);
 
-    try {
-      const response = (await chrome.runtime.sendMessage({
-        action: "fixGrammar",
-        text: text,
-      })) as unknown as MessageResponse;
+  const style = div.style;
+  const computed = getComputedStyle(element);
 
-      if (response && response.success) {
-        element.value = response.result || text;
-        // Trigger input event so the page knows the value changed
-        element.dispatchEvent(new Event("input", { bubbles: true }));
-      } else {
-        alert("Error: " + (response?.error || "Failed to fix grammar"));
-      }
-    } catch (error) {
-      alert("Error: " + error);
-    } finally {
-      loading = false;
-      updateUI();
-    }
+  style.whiteSpace = "pre-wrap";
+  if (!isInput) {
+    style.wordWrap = "break-word";
   }
 
-  async function handleTranslate(element: HTMLInputElement | HTMLTextAreaElement) {
-    const text = element.value;
-    if (!text.trim()) {
-      alert("Please enter some text first.");
-      return;
-    }
+  // Copy crucial styles
+  const properties = [
+    "direction",
+    "boxSizing",
+    "width",
+    "height",
+    "overflowX",
+    "overflowY",
+    "borderTopWidth",
+    "borderRightWidth",
+    "borderBottomWidth",
+    "borderLeftWidth",
+    "borderStyle",
+    "paddingTop",
+    "paddingRight",
+    "paddingBottom",
+    "paddingLeft",
+    "fontStyle",
+    "fontVariant",
+    "fontWeight",
+    "fontStretch",
+    "fontSize",
+    "fontSizeAdjust",
+    "lineHeight",
+    "fontFamily",
+    "textAlign",
+    "textTransform",
+    "textIndent",
+    "textDecoration",
+    "letterSpacing",
+    "wordSpacing",
+  ];
 
-    loading = true;
-    updateUI();
-
-    try {
-      const response = (await chrome.runtime.sendMessage({
-        action: "translate",
-        text: text,
-      })) as unknown as MessageResponse;
-
-      if (response && response.success) {
-        element.value = response.result || text;
-        // Trigger input event so the page knows the value changed
-        element.dispatchEvent(new Event("input", { bubbles: true }));
-      } else {
-        alert("Error: " + (response?.error || "Failed to translate"));
-      }
-    } catch (error) {
-      alert("Error: " + error);
-    } finally {
-      loading = false;
-      updateUI();
-    }
-  }
-}
-
-function processTextInputs() {
-  if (!isEnabled) {
-    return;
-  }
-
-  const inputs =
-    document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
-      'input[type="text"], input:not([type]), textarea'
-    );
-
-  inputs.forEach((input) => {
-    if (processedInputs.has(input)) return;
-
-    const style = window.getComputedStyle(input);
-    if (style.display === "none" || style.visibility === "hidden") return;
-
-    createButtonContainer(input);
+  properties.forEach(prop => {
+    style[prop as any] = computed[prop as any];
   });
+
+  if (debug) {
+    style.backgroundColor = "#aaa";
+    style.position = 'absolute';
+    style.top = `${element.offsetTop}px`;
+    style.left = `${element.offsetLeft}px`;
+  } else {
+    style.position = "absolute";
+    style.visibility = "hidden";
+  }
+
+  div.textContent = element.value.substring(0, position);
+
+  if (isInput) {
+    div.textContent = div.textContent.replace(/\s/g, "\u00a0");
+  }
+
+  const span = document.createElement("span");
+  span.textContent = element.value.substring(position) || ".";
+  div.appendChild(span);
+
+  const coordinates = {
+    top: span.offsetTop + parseInt(computed.borderTopWidth),
+    left: span.offsetLeft + parseInt(computed.borderLeftWidth),
+    height: span.offsetHeight
+  };
+
+  document.body.removeChild(div);
+
+  return coordinates;
 }
 
-initializeExtensionState();
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message.action === "setExtensionEnabled") {
-    setExtensionEnabled(Boolean(message.enabled));
-    sendResponse({ success: true });
+function positionAccessory(
+  inputElement: HTMLInputElement | HTMLTextAreaElement,
+  container: HTMLElement
+) {
+  const rect = inputElement.getBoundingClientRect();
+  const caretPos = inputElement.selectionStart || 0;
+  const coords = getCaretCoordinates(inputElement, caretPos);
+
+  const top = window.scrollY + rect.top + coords.top - inputElement.scrollTop;
+  const left = window.scrollX + rect.left + coords.left - inputElement.scrollLeft;
+
+  container.style.position = "absolute";
+  container.style.top = `${top}px`;
+  container.style.left = `${left + 4}px`; // Add some offset to not overlap with cursor
+  container.style.zIndex = "9999";
+}
+
+function showAccessoryFor(element: HTMLInputElement | HTMLTextAreaElement) {
+  if (activeInput === element) return;
+
+  hideAccessory();
+
+  activeInput = element;
+  accessoryContainer = document.createElement("div");
+  document.body.appendChild(accessoryContainer);
+
+  const root = createRoot(accessoryContainer);
+  root.render(<InputAccessory inputElement={element} />);
+
+  positionAccessory(element, accessoryContainer);
+
+  const updatePosition = () => positionAccessory(element, accessoryContainer!);
+
+  element.addEventListener("input", updatePosition);
+  element.addEventListener("keyup", updatePosition);
+  element.addEventListener("mousedown", updatePosition);
+  element.addEventListener("scroll", updatePosition);
+  window.addEventListener("resize", updatePosition);
+}
+
+function hideAccessory() {
+  if (accessoryContainer) {
+    document.body.removeChild(accessoryContainer);
+    accessoryContainer = null;
   }
-});
+  activeInput = null;
+}
 
-chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName !== "sync" || !changes[DISABLED_SITES_KEY]) {
-    return;
+document.addEventListener(
+  "focusin",
+  (event) => {
+    const target = event.target as HTMLElement;
+    if (
+      target.tagName.toLowerCase() === "input" ||
+      target.tagName.toLowerCase() === "textarea"
+    ) {
+      showAccessoryFor(target as HTMLInputElement | HTMLTextAreaElement);
+    }
+  },
+  true
+);
+
+document.addEventListener(
+  "focusout",
+  (event) => {
+    const relatedTarget = event.relatedTarget as HTMLElement;
+    if (
+      !accessoryContainer ||
+      !accessoryContainer.contains(relatedTarget)
+    ) {
+      hideAccessory();
+    }
+  },
+  true
+);
+
+const style = document.createElement("style");
+style.textContent = `
+  @keyframes pulse {
+    0% {
+      transform: scale(0.95);
+      box-shadow: 0 0 0 0 rgba(16, 97, 127, 0.77);
+    }
+    70% {
+      transform: scale(1);
+      box-shadow: 0 0 0 10px rgba(33, 150, 243, 0);
+    }
+    100% {
+      transform: scale(0.95);
+      box-shadow: 0 0 0 0 rgba(33, 150, 243, 0);
+    }
   }
-
-  const newValue: string[] = changes[DISABLED_SITES_KEY].newValue || [];
-  const shouldEnable = !newValue.includes(CURRENT_ORIGIN);
-  setExtensionEnabled(shouldEnable);
-});
+`;
+document.head.appendChild(style);
