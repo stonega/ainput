@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { IoSettingsOutline } from "react-icons/io5";
 
 export const Popup = () => {
   const [currentOrigin, setCurrentOrigin] = useState<string>();
@@ -83,6 +84,10 @@ export const Popup = () => {
     });
   };
 
+  const openOptionsPage = () => {
+    chrome.runtime.openOptionsPage();
+  };
+
   const isLoading =
     isDisabled === null || !currentOrigin || activeTabId === undefined;
 
@@ -148,7 +153,33 @@ export const Popup = () => {
 
   return (
     <div style={containerStyle}>
-      <h1 style={titleStyle}>AINPUT</h1>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          position: "relative",
+          width: "100%",
+        }}
+      >
+        <h1 style={titleStyle}>AINPUT</h1>
+        <button
+          onClick={openOptionsPage}
+          style={{
+            position: "absolute",
+            right: 0,
+            top: "50%",
+            transform: "translateY(-50%)",
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            padding: "5px",
+          }}
+          title="Settings"
+        >
+          <IoSettingsOutline color="#2196F3" size={20} />
+        </button>
+      </div>
       <p style={descriptionStyle}>
         Control whether the extension is active on{" "}
         <strong>{currentOrigin || "this page"}</strong>.

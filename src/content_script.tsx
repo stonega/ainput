@@ -1,7 +1,6 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
-import { MdTranslate } from "react-icons/md";
-import { MdAutoFixHigh } from "react-icons/md";
+import { MdTranslate, MdAutoFixHigh, MdHourglassEmpty } from "react-icons/md";
 
 interface ButtonContainerProps {
   onFixGrammar: () => void;
@@ -38,6 +37,25 @@ const ButtonContainer: React.FC<ButtonContainerProps> = ({
     transition: "background-color 0.2s",
   };
 
+  if (loading) {
+    return (
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "4px",
+          padding: "8px 6px",
+          color: "#333",
+          fontSize: "14px",
+          whiteSpace: "nowrap",
+        }}
+      >
+        <MdHourglassEmpty size={16} />
+        <span>Thinking...</span>
+      </div>
+    );
+  }
+
   return (
     <div
       style={{
@@ -60,9 +78,7 @@ const ButtonContainer: React.FC<ButtonContainerProps> = ({
         }}
       >
         <MdAutoFixHigh size={16} />
-        <span style={{ whiteSpace: "nowrap" }}>
-          {loading ? "Processing..." : "Fix Grammar"}
-        </span>
+        <span style={{ whiteSpace: "nowrap" }}>Fix Grammar</span>
       </button>
       <button
         onClick={onTranslate}
@@ -77,7 +93,7 @@ const ButtonContainer: React.FC<ButtonContainerProps> = ({
         }}
       >
         <MdTranslate size={16} />
-        <span>{loading ? "Processing..." : "Translate"}</span>
+        <span>Translate</span>
       </button>
     </div>
   );
