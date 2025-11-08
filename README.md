@@ -2,6 +2,8 @@
 
 A powerful Chrome extension that enhances text input on any web page using Google's Gemini 2.0 Flash AI model. Features include grammar fixing and translation to multiple languages.
 
+![AInput Screenshot](screenshots/screenshot.png)
+
 ## Features
 
 ✨ **Fix Grammar** - Automatically fix grammar and spelling errors in your text  

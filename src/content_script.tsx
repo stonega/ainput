@@ -426,9 +426,32 @@ function hideAccessory() {
   activeInput = null;
 }
 
+let isExtensionEnabled = true;
+
+function checkIsEnabled() {
+  const currentOrigin = window.location.origin;
+  chrome.storage.sync.get("disabledSites", (data) => {
+    const disabledSites = data.disabledSites || [];
+    isExtensionEnabled = !disabledSites.includes(currentOrigin);
+    if (!isExtensionEnabled) {
+      hideAccessory();
+    }
+  });
+}
+
+checkIsEnabled();
+
+chrome.storage.onChanged.addListener((changes, namespace) => {
+  if (namespace === "sync" && changes.disabledSites) {
+    checkIsEnabled();
+  }
+});
+
 document.addEventListener(
   "focusin",
   (event) => {
+    if (!isExtensionEnabled) return;
+
     const target = event.target as HTMLElement;
 
     if (target.tagName.toLowerCase() === "textarea") {
