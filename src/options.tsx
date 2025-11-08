@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 
 const Options = () => {
   const [apiKey, setApiKey] = useState<string>("");
-  const [targetLanguage, setTargetLanguage] = useState<string>("Spanish");
+  const [targetLanguage, setTargetLanguage] = useState<string>("English");
   const [status, setStatus] = useState<string>("");
 
   useEffect(() => {
@@ -11,7 +11,7 @@ const Options = () => {
     chrome.storage.sync.get(
       {
         apiKey: "",
-        targetLanguage: "Spanish",
+        targetLanguage: "English",
       },
       (items) => {
         setApiKey(items.apiKey);
@@ -65,7 +65,7 @@ const Options = () => {
   const titleStyle: React.CSSProperties = {
     fontSize: "32px",
     fontWeight: 700,
-    color: "#2196F3",
+    color: "#00B1F2",
     margin: "0 0 5px 0",
   };
 
@@ -105,7 +105,7 @@ const Options = () => {
   };
 
   const linkStyle: React.CSSProperties = {
-    color: "#2196F3",
+    color: "#00B1F2",
     textDecoration: "none",
   };
 
@@ -117,7 +117,7 @@ const Options = () => {
 
   const buttonStyle: React.CSSProperties = {
     padding: "12px 24px",
-    backgroundColor: "#2196F3",
+    backgroundColor: "#00B1F2",
     color: "white",
     border: "none",
     borderRadius: "6px",
@@ -201,6 +201,7 @@ const Options = () => {
               onChange={(event) => setTargetLanguage(event.target.value)}
               style={inputStyle}
             >
+              <option value="English">English</option>
               <option value="Spanish">Spanish</option>
               <option value="French">French</option>
               <option value="German">German</option>

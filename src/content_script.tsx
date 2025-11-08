@@ -50,8 +50,8 @@ const ButtonContainer: React.FC<ButtonContainerProps> = ({
           whiteSpace: "nowrap",
         }}
       >
-        <MdHourglassEmpty size={16} />
-        <span>Thinking...</span>
+        <MdHourglassEmpty size={16} color="#62109F" />
+        <span className="ainput-thinking-gradient">Thinking...</span>
       </div>
     );
   }
@@ -61,7 +61,7 @@ const ButtonContainer: React.FC<ButtonContainerProps> = ({
       style={{
         display: "flex",
         flexDirection: "column",
-        gap: "4px",
+        gap: "2px",
         padding: "2px",
       }}
     >
@@ -77,7 +77,7 @@ const ButtonContainer: React.FC<ButtonContainerProps> = ({
           opacity: loading ? 0.6 : 1,
         }}
       >
-        <MdAutoFixHigh size={16} />
+        <MdAutoFixHigh size={16} color="#62109F" />
         <span style={{ whiteSpace: "nowrap" }}>Fix Grammar</span>
       </button>
       <button
@@ -92,7 +92,7 @@ const ButtonContainer: React.FC<ButtonContainerProps> = ({
           opacity: loading ? 0.6 : 1,
         }}
       >
-        <MdTranslate size={16} />
+        <MdTranslate size={16} color="#41A67E" />
         <span>Translate</span>
       </button>
     </div>
@@ -149,7 +149,9 @@ const InputAccessory: React.FC<{
         newTop = `${-popoverHeight - 4}px`;
       }
 
-      setPopoverTop((currentTop) => (currentTop === newTop ? currentTop : newTop));
+      setPopoverTop((currentTop) =>
+        currentTop === newTop ? currentTop : newTop
+      );
     }
   }, []);
 
@@ -251,7 +253,7 @@ const InputAccessory: React.FC<{
         style={{
           width: "12px",
           height: "12px",
-          backgroundColor: "#2196F3",
+          backgroundColor: "#00B1F2",
           borderRadius: "50%",
           cursor: "pointer",
           animation: loading ? "ainput-pulse 1.5s infinite" : "none",
@@ -519,6 +521,12 @@ style.textContent = `
       transform: scale(0.95);
       box-shadow: 0 0 0 0 rgba(33, 150, 243, 0);
     }
+  }
+  .ainput-thinking-gradient {
+    background: linear-gradient(90deg, #62109F, #41A67E);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-weight: bold;
   }
 `;
 document.head.appendChild(style);

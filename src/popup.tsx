@@ -94,7 +94,7 @@ export const Popup = () => {
   const containerStyle: React.CSSProperties = {
     fontFamily:
       '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"',
-    padding: "20px",
+    padding: "0px 10px",
     minWidth: "280px",
     textAlign: "center",
     backgroundColor: "#ffffff",
@@ -104,8 +104,7 @@ export const Popup = () => {
   const titleStyle: React.CSSProperties = {
     fontSize: "20px",
     fontWeight: 600,
-    color: "#2196F3",
-    margin: "0 0 10px 0",
+    color: "#00B1F2",
   };
 
   const descriptionStyle: React.CSSProperties = {
@@ -156,7 +155,7 @@ export const Popup = () => {
       <div
         style={{
           display: "flex",
-          justifyContent: "center",
+          justifyContent: "space-between",
           alignItems: "center",
           position: "relative",
           width: "100%",
@@ -166,18 +165,13 @@ export const Popup = () => {
         <button
           onClick={openOptionsPage}
           style={{
-            position: "absolute",
-            right: 0,
-            top: "50%",
-            transform: "translateY(-50%)",
             background: "none",
             border: "none",
             cursor: "pointer",
-            padding: "5px",
           }}
           title="Settings"
         >
-          <IoSettingsOutline color="#2196F3" size={20} />
+          <IoSettingsOutline color="#00B1F2" size={20} />
         </button>
       </div>
       <p style={descriptionStyle}>
