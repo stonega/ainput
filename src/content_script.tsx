@@ -83,11 +83,13 @@ const ButtonContainer: React.FC<ButtonContainerProps> = ({
   );
 };
 
-let activeInput: HTMLInputElement | HTMLTextAreaElement | null = null;
+type EditableElement = HTMLInputElement | HTMLTextAreaElement | HTMLElement;
+
+let activeInput: EditableElement | null = null;
 let accessoryContainer: HTMLDivElement | null = null;
 
 const InputAccessory: React.FC<{
-  inputElement: HTMLInputElement | HTMLTextAreaElement;
+  inputElement: EditableElement;
 }> = ({ inputElement }) => {
   const [popoverVisible, setPopoverVisible] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
@@ -111,9 +113,9 @@ const InputAccessory: React.FC<{
 
   const handleAction = async (
     action: "fixGrammar" | "translate",
-    element: HTMLInputElement | HTMLTextAreaElement
+    element: EditableElement
   ) => {
-    const text = element.value;
+    const text = "value" in element ? element.value : element.textContent || "";
     if (!text.trim()) {
       alert("Please enter some text first.");
       return;
@@ -129,7 +131,11 @@ const InputAccessory: React.FC<{
       })) as unknown as MessageResponse;
 
       if (response && response.success) {
-        element.value = response.result || text;
+        if ("value" in element) {
+          element.value = response.result || text;
+        } else {
+          element.textContent = response.result || text;
+        }
         element.dispatchEvent(new Event("input", { bubbles: true }));
       } else {
         alert("Error: " + (response?.error || `Failed to ${action}`));
@@ -185,11 +191,9 @@ const InputAccessory: React.FC<{
   );
 };
 
-function getCaretCoordinates(
-  element: HTMLInputElement | HTMLTextAreaElement,
-  position: number
-) {
+function getCaretCoordinates(element: EditableElement, position: number) {
   const isInput = element.tagName.toLowerCase() === "input";
+  const isDiv = element.tagName.toLowerCase() === "div";
   const debug = false;
   const div = document.createElement("div");
   document.body.appendChild(div);
@@ -249,14 +253,19 @@ function getCaretCoordinates(
     style.visibility = "hidden";
   }
 
-  div.textContent = element.value.substring(0, position);
+  div.textContent = (
+    "value" in element ? element.value : element.textContent || ""
+  ).substring(0, position);
 
   if (isInput) {
-    div.textContent = div.textContent.replace(/\s/g, "\u00a0");
+    div.textContent = div.textContent.replace(/\s/g, " ");
   }
 
   const span = document.createElement("span");
-  span.textContent = element.value.substring(position) || ".";
+  span.textContent =
+    ("value" in element ? element.value : element.textContent || "").substring(
+      position
+    ) || ".";
   div.appendChild(span);
 
   const coordinates = {
@@ -271,16 +280,29 @@ function getCaretCoordinates(
 }
 
 function positionAccessory(
-  inputElement: HTMLInputElement | HTMLTextAreaElement,
+  inputElement: EditableElement,
   container: HTMLElement
 ) {
   const rect = inputElement.getBoundingClientRect();
-  const caretPos = inputElement.selectionStart || 0;
+  const isDiv = inputElement.tagName.toLowerCase() === "div";
+
+  const caretPos =
+    "selectionStart" in inputElement && inputElement.selectionStart
+      ? inputElement.selectionStart
+      : 0;
+
   const coords = getCaretCoordinates(inputElement, caretPos);
 
-  const top = window.scrollY + rect.top + coords.top - inputElement.scrollTop;
+  const top =
+    window.scrollY +
+    rect.top +
+    coords.top -
+    (inputElement as HTMLInputElement | HTMLTextAreaElement).scrollTop;
   const left =
-    window.scrollX + rect.left + coords.left - inputElement.scrollLeft;
+    window.scrollX +
+    rect.left +
+    coords.left -
+    (inputElement as HTMLInputElement | HTMLTextAreaElement).scrollLeft;
 
   container.style.position = "absolute";
   container.style.top = `${top}px`;
@@ -288,7 +310,7 @@ function positionAccessory(
   container.style.zIndex = "9999";
 }
 
-function showAccessoryFor(element: HTMLInputElement | HTMLTextAreaElement) {
+function showAccessoryFor(element: EditableElement) {
   if (activeInput === element) return;
 
   hideAccessory();
@@ -323,11 +345,25 @@ document.addEventListener(
   "focusin",
   (event) => {
     const target = event.target as HTMLElement;
+
+    if (target.tagName.toLowerCase() === "textarea") {
+      showAccessoryFor(target as HTMLTextAreaElement);
+      return;
+    }
+
+    if (target instanceof HTMLInputElement) {
+      const INPUT_TYPES = ["text", "email", "search", "tel", "url"];
+      if (INPUT_TYPES.includes(target.type)) {
+        showAccessoryFor(target);
+      }
+      return;
+    }
+
     if (
-      target.tagName.toLowerCase() === "input" ||
-      target.tagName.toLowerCase() === "textarea"
+      target.isContentEditable &&
+      target.tagName.toLowerCase().includes("div")
     ) {
-      showAccessoryFor(target as HTMLInputElement | HTMLTextAreaElement);
+      showAccessoryFor(target);
     }
   },
   true
