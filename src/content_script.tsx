@@ -93,6 +93,7 @@ const InputAccessory: React.FC<{
 }> = ({ inputElement }) => {
   const [popoverVisible, setPopoverVisible] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
+  const [textToAnimate, setTextToAnimate] = React.useState<string | null>(null);
   const accessoryRef = React.useRef<HTMLDivElement>(null);
   const popoverRef = React.useRef<HTMLDivElement>(null);
   const [popoverTop, setPopoverTop] = React.useState("16px");
@@ -150,6 +151,39 @@ const InputAccessory: React.FC<{
     }
   }, [popoverVisible, adjustPopoverPosition]);
 
+  React.useEffect(() => {
+    if (!textToAnimate) {
+      return;
+    }
+
+    const words = textToAnimate.split(/(\s+)/);
+    let currentText = "";
+    let wordIndex = 0;
+
+    const intervalId = setInterval(() => {
+      if (wordIndex >= words.length) {
+        clearInterval(intervalId);
+        setLoading(false);
+        setTextToAnimate(null);
+        return;
+      }
+
+      currentText += words[wordIndex];
+      if ("value" in inputElement) {
+        inputElement.value = currentText;
+      } else {
+        inputElement.textContent = currentText;
+      }
+      inputElement.dispatchEvent(new Event("input", { bubbles: true }));
+
+      wordIndex++;
+    }, 50);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [textToAnimate, inputElement, setLoading]);
+
   const handleAction = async (
     action: "fixGrammar" | "translate",
     element: EditableElement
@@ -169,19 +203,20 @@ const InputAccessory: React.FC<{
         text,
       })) as unknown as MessageResponse;
 
-      if (response && response.success) {
+      if (response && response.success && response.result) {
         if ("value" in element) {
-          element.value = response.result || text;
+          element.value = "";
         } else {
-          element.textContent = response.result || text;
+          element.textContent = "";
         }
         element.dispatchEvent(new Event("input", { bubbles: true }));
+        setTextToAnimate(response.result);
       } else {
         alert("Error: " + (response?.error || `Failed to ${action}`));
+        setLoading(false);
       }
     } catch (error) {
       alert("Error: " + error);
-    } finally {
       setLoading(false);
     }
   };
