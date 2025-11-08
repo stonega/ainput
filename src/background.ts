@@ -98,3 +98,21 @@ async function handleTranslate(text: string): Promise<string> {
 
   return await callGeminiAPI(prompt, settings.apiKey);
 }
+
+chrome.commands.onCommand.addListener((command) => {
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (tabs[0] && tabs[0].id) {
+      if (command === "fix-grammar") {
+        chrome.tabs.sendMessage(tabs[0].id, { action: "fixGrammarShortcut" });
+      } else if (command === "translate") {
+        chrome.tabs.sendMessage(tabs[0].id, { action: "translateShortcut" });
+      }
+    }
+  });
+});
+
+chrome.runtime.onInstalled.addListener((details) => {
+  if (details.reason === "install") {
+    chrome.runtime.openOptionsPage();
+  }
+});

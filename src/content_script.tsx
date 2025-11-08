@@ -115,6 +115,34 @@ const InputAccessory: React.FC<{
   const [popoverTop, setPopoverTop] = React.useState("16px");
 
   React.useEffect(() => {
+    const handleLoadingStart = () => setLoading(true);
+    const handleLoadingEnd = () => {
+      setLoading(false);
+      setPopoverVisible(false);
+    };
+
+    inputElement.addEventListener(
+      "ainput-loading-start",
+      handleLoadingStart as EventListener
+    );
+    inputElement.addEventListener(
+      "ainput-loading-end",
+      handleLoadingEnd as EventListener
+    );
+
+    return () => {
+      inputElement.removeEventListener(
+        "ainput-loading-start",
+        handleLoadingStart as EventListener
+      );
+      inputElement.removeEventListener(
+        "ainput-loading-end",
+        handleLoadingEnd as EventListener
+      );
+    };
+  }, [inputElement]);
+
+  React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
         accessoryRef.current &&
@@ -530,3 +558,82 @@ style.textContent = `
   }
 `;
 document.head.appendChild(style);
+
+const handleShortcut = async (action: "fixGrammar" | "translate") => {
+  const element = activeInput;
+  if (!element) return;
+
+  let textToProcess = "";
+  let selectionStart: number | null = null;
+  let selectionEnd: number | null = null;
+
+  const isInputElement =
+    element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement;
+
+  if (isInputElement) {
+    selectionStart = element.selectionStart;
+    selectionEnd = element.selectionEnd;
+    if (
+      selectionStart !== null &&
+      selectionEnd !== null &&
+      selectionStart !== selectionEnd
+    ) {
+      textToProcess = element.value.substring(selectionStart, selectionEnd);
+    }
+  } else if (element.isContentEditable) {
+    const selection = window.getSelection();
+    if (selection && !selection.isCollapsed) {
+      textToProcess = selection.toString();
+    }
+  }
+
+  if (!textToProcess.trim()) {
+    // No text selected, do nothing.
+    return;
+  }
+
+  element.dispatchEvent(new Event("ainput-loading-start"));
+
+  try {
+    const response = (await chrome.runtime.sendMessage({
+      action,
+      text: textToProcess,
+    })) as unknown as MessageResponse;
+
+    if (response && response.success && response.result) {
+      if (isInputElement && selectionStart !== null && selectionEnd !== null) {
+        const { value } = element;
+        element.value =
+          value.slice(0, selectionStart) +
+          response.result +
+          value.slice(selectionEnd);
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+      } else if (element.isContentEditable) {
+        const selection = window.getSelection();
+        if (selection && selection.rangeCount > 0) {
+          const range = selection.getRangeAt(0);
+          range.deleteContents();
+          range.insertNode(document.createTextNode(response.result));
+          element.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+      }
+    } else {
+      alert("Error: " + (response?.error || `Failed to ${action}`));
+    }
+  } catch (error) {
+    alert("Error: " + error);
+  } finally {
+    element.dispatchEvent(new Event("ainput-loading-end"));
+  }
+};
+
+chrome.runtime.onMessage.addListener((message) => {
+  if (
+    message.action === "fixGrammarShortcut" ||
+    message.action === "translateShortcut"
+  ) {
+    const action =
+      message.action === "fixGrammarShortcut" ? "fixGrammar" : "translate";
+    handleShortcut(action);
+  }
+});

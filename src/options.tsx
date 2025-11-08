@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { FaGithub } from "react-icons/fa";
 
 const Options = () => {
   const [apiKey, setApiKey] = useState<string>("");
   const [targetLanguage, setTargetLanguage] = useState<string>("English");
-  const [status, setStatus] = useState<string>("");
+  const [settingsStatus, setSettingsStatus] = useState<string>("");
+  const [disabledListStatus, setDisabledListStatus] = useState<string>("");
+  const [disabledSites, setDisabledSites] = useState<string[]>([]);
 
   useEffect(() => {
     // Restore settings from chrome.storage
@@ -12,10 +15,12 @@ const Options = () => {
       {
         apiKey: "",
         targetLanguage: "English",
+        disabledSites: [],
       },
       (items) => {
         setApiKey(items.apiKey);
         setTargetLanguage(items.targetLanguage);
+        setDisabledSites(items.disabledSites);
       }
     );
   }, []);
@@ -23,8 +28,8 @@ const Options = () => {
   const saveOptions = () => {
     // Validate API key
     if (!apiKey.trim()) {
-      setStatus("Please enter a valid API key.");
-      setTimeout(() => setStatus(""), 3000);
+      setSettingsStatus("Please enter a valid API key.");
+      setTimeout(() => setSettingsStatus(""), 3000);
       return;
     }
 
@@ -35,10 +40,19 @@ const Options = () => {
         targetLanguage: targetLanguage,
       },
       () => {
-        setStatus("Settings saved successfully!");
-        setTimeout(() => setStatus(""), 3000);
+        setSettingsStatus("Settings saved successfully!");
+        setTimeout(() => setSettingsStatus(""), 3000);
       }
     );
+  };
+
+  const removeSite = (siteToRemove: string) => {
+    const updatedSites = disabledSites.filter((site) => site !== siteToRemove);
+    chrome.storage.sync.set({ disabledSites: updatedSites }, () => {
+      setDisabledSites(updatedSites);
+      setDisabledListStatus(`Successfully removed ${siteToRemove} from the disabled list.`);
+      setTimeout(() => setDisabledListStatus(""), 3000);
+    });
   };
 
   const pageStyle: React.CSSProperties = {
@@ -81,6 +95,19 @@ const Options = () => {
     padding: "24px",
     marginBottom: "20px",
     boxShadow: "0 4px 12px rgba(0, 0, 0, 0.08)",
+  };
+
+  const disabledListStyle: React.CSSProperties = {
+    listStyle: "none",
+    padding: 0,
+  };
+
+  const disabledListItemStyle: React.CSSProperties = {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "10px 0",
+    borderBottom: "1px solid #eee",
   };
 
   const formGroupStyle: React.CSSProperties = {
@@ -127,6 +154,13 @@ const Options = () => {
     transition: "background-color 0.2s",
   };
 
+  const removeButtonStyle: React.CSSProperties = {
+    ...buttonStyle,
+    backgroundColor: "#dc3545",
+    padding: "5px 10px",
+    fontSize: "12px",
+  };
+
   const statusMessageStyle: React.CSSProperties = {
     marginTop: "15px",
     padding: "12px",
@@ -163,6 +197,25 @@ const Options = () => {
     paddingLeft: "20px",
   };
 
+  const footerStyle: React.CSSProperties = {
+    textAlign: "center",
+    marginTop: "40px",
+    color: "#888",
+    fontSize: "14px",
+  };
+
+  const iconStyle: React.CSSProperties = {
+    verticalAlign: "middle",
+    marginRight: "8px",
+  };
+
+  const shortcutListStyle: React.CSSProperties = {
+    lineHeight: "1.8",
+    color: "#555",
+    paddingLeft: "0",
+    listStyle: "none",
+  };
+
   return (
     <div style={pageStyle}>
       <div style={containerStyle}>
@@ -172,6 +225,7 @@ const Options = () => {
         </header>
 
         <div style={cardStyle}>
+          <h3 style={howToUseTitleStyle}>Settings</h3>
           <div style={formGroupStyle}>
             <label style={labelStyle}>Gemini API Key:</label>
             <input
@@ -229,36 +283,74 @@ const Options = () => {
             Save Settings
           </button>
 
-          {status && (
+          {settingsStatus && (
             <div
               style={
-                status.includes("success")
+                settingsStatus.includes("success")
                   ? successStatusStyle
                   : errorStatusStyle
               }
             >
-              {status}
+              {settingsStatus}
             </div>
           )}
         </div>
 
-        <div style={cardStyle}>
-          <h3 style={howToUseTitleStyle}>How to use:</h3>
-          <ol style={howToUseListStyle}>
-            <li>Get your Gemini API key from Google AI Studio</li>
-            <li>
-              Enter your API key above and select your preferred translation
-              language
+        {disabledSites.length > 0 && (
+          <div style={cardStyle}>
+            <h3 style={howToUseTitleStyle}>Disabled Sites</h3>
+            <ul style={disabledListStyle}>
+              {disabledSites.map((site) => (
+                <li key={site} style={disabledListItemStyle}>
+                  <span>{site}</span>
+                  <button onClick={() => removeSite(site)} style={removeButtonStyle}>
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {disabledListStatus && (
+              <div
+                style={
+                  disabledListStatus.includes("success")
+                    ? successStatusStyle
+                    : errorStatusStyle
+                }
+              >
+                {disabledListStatus}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* <div style={cardStyle}>
+          <h3 style={howToUseTitleStyle}>Keyboard Shortcuts</h3>
+          <p style={{ ...hintStyle, marginTop: 0, marginBottom: "15px" }}>
+            Select text in any editable field and use the following shortcuts:
+          </p>
+          <ul style={shortcutListStyle}>
+            <li style={{ marginBottom: "10px" }}>
+              <strong>Fix Grammar:</strong> <code>Ctrl+Shift+F</code> (or{" "}
+              <code>Cmd+Shift+F</code> on Mac)
             </li>
-            <li>Click "Save Settings"</li>
-            <li>Visit any webpage with text inputs or textareas</li>
             <li>
-              You'll see "Fix Grammar" and "Translate" buttons below each text
-              field
+              <strong>Translate:</strong> <code>Ctrl+Shift+T</code> (or{" "}
+              <code>Cmd+Shift+T</code> on Mac)
             </li>
-            <li>Type your text and click the buttons to enhance it with AI</li>
-          </ol>
-        </div>
+          </ul>
+        </div> */}
+
+        <footer style={footerStyle}>
+          <a
+            href="https://github.com/stonega/ainput"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={linkStyle}
+          >
+            <FaGithub style={iconStyle} />
+            Open Source
+          </a>
+        </footer>
       </div>
     </div>
   );
