@@ -94,6 +94,8 @@ const InputAccessory: React.FC<{
   const [popoverVisible, setPopoverVisible] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const accessoryRef = React.useRef<HTMLDivElement>(null);
+  const popoverRef = React.useRef<HTMLDivElement>(null);
+  const [popoverTop, setPopoverTop] = React.useState("16px");
 
   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -110,6 +112,43 @@ const InputAccessory: React.FC<{
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
+
+  const adjustPopoverPosition = React.useCallback(() => {
+    if (accessoryRef.current && popoverRef.current) {
+      const accessoryRect = accessoryRef.current.getBoundingClientRect();
+      const popoverHeight = popoverRef.current.offsetHeight;
+      const viewportHeight = window.innerHeight;
+
+      // Check if there's enough space below
+      const popoverBottom = accessoryRect.top + 16 + popoverHeight;
+      const hasSpaceBelow = popoverBottom < viewportHeight;
+
+      // Check if there's enough space above
+      const hasSpaceAbove = accessoryRect.top > popoverHeight + 4;
+
+      let newTop = "16px"; // Default position is below
+      if (!hasSpaceBelow && hasSpaceAbove) {
+        // Not enough space below, but enough above, so move to top
+        newTop = `${-popoverHeight - 4}px`;
+      }
+
+      setPopoverTop((currentTop) => (currentTop === newTop ? currentTop : newTop));
+    }
+  }, []);
+
+  React.useLayoutEffect(() => {
+    if (popoverVisible) {
+      adjustPopoverPosition();
+
+      window.addEventListener("scroll", adjustPopoverPosition, true);
+      window.addEventListener("resize", adjustPopoverPosition);
+
+      return () => {
+        window.removeEventListener("scroll", adjustPopoverPosition, true);
+        window.removeEventListener("resize", adjustPopoverPosition);
+      };
+    }
+  }, [popoverVisible, adjustPopoverPosition]);
 
   const handleAction = async (
     action: "fixGrammar" | "translate",
@@ -169,14 +208,15 @@ const InputAccessory: React.FC<{
       />
       {popoverVisible && (
         <div
+          ref={popoverRef}
           style={{
             position: "absolute",
-            top: "16px",
+            top: popoverTop,
             left: "0px",
             zIndex: 10000,
             background: "white",
             borderRadius: "8px",
-            boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
+            boxShadow: "0 2px 12px rgba(0,0,0,0.2)",
             padding: "4px",
           }}
         >
@@ -284,12 +324,22 @@ function positionAccessory(
   container: HTMLElement
 ) {
   const rect = inputElement.getBoundingClientRect();
-  const isDiv = inputElement.tagName.toLowerCase() === "div";
-
-  const caretPos =
-    "selectionStart" in inputElement && inputElement.selectionStart
-      ? inputElement.selectionStart
-      : 0;
+  let caretPos = 0;
+  if (
+    inputElement instanceof HTMLInputElement ||
+    inputElement instanceof HTMLTextAreaElement
+  ) {
+    caretPos = inputElement.selectionStart || 0;
+  } else if (inputElement.isContentEditable) {
+    const selection = window.getSelection();
+    if (selection && selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      const preCaretRange = range.cloneRange();
+      preCaretRange.selectNodeContents(inputElement);
+      preCaretRange.setEnd(range.endContainer, range.endOffset);
+      caretPos = preCaretRange.toString().length;
+    }
+  }
 
   const coords = getCaretCoordinates(inputElement, caretPos);
 
@@ -297,12 +347,12 @@ function positionAccessory(
     window.scrollY +
     rect.top +
     coords.top -
-    (inputElement as HTMLInputElement | HTMLTextAreaElement).scrollTop;
+    (inputElement as HTMLElement).scrollTop;
   const left =
     window.scrollX +
     rect.left +
     coords.left -
-    (inputElement as HTMLInputElement | HTMLTextAreaElement).scrollLeft;
+    (inputElement as HTMLElement).scrollLeft;
 
   container.style.position = "absolute";
   container.style.top = `${top}px`;
