@@ -14,7 +14,7 @@ interface GeminiResponse {
 }
 
 async function callGeminiAPI(prompt: string, apiKey: string): Promise<string> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
   const response = await fetch(url, {
     method: "POST",
@@ -38,14 +38,17 @@ async function callGeminiAPI(prompt: string, apiKey: string): Promise<string> {
     }),
   });
 
-  if (!response.ok) {
-    throw new Error(`API request failed: ${response.statusText}`);
-  }
-
   const data: GeminiResponse = await response.json();
 
   if (data.error) {
+    if (data.error.message.toLowerCase().includes("quota")) {
+      throw new Error("You have exceeded your Gemini API quota.");
+    }
     throw new Error(data.error.message);
+  }
+
+  if (!response.ok) {
+    throw new Error(`API request failed: ${response.statusText}`);
   }
 
   if (!data.candidates || data.candidates.length === 0) {
@@ -65,6 +68,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === "translate") {
     handleTranslate(message.text)
+      .then((result) => sendResponse({ success: true, result }))
+      .catch((error) => sendResponse({ success: false, error: error.message }));
+    return true; // Keep the message channel open for async response
+  }
+
+  if (message.action === "enhancePrompt") {
+    handleEnhancePrompt(message.text)
       .then((result) => sendResponse({ success: true, result }))
       .catch((error) => sendResponse({ success: false, error: error.message }));
     return true; // Keep the message channel open for async response
@@ -95,6 +105,19 @@ async function handleTranslate(text: string): Promise<string> {
   const targetLanguage = settings.targetLanguage || "Spanish";
 
   const prompt = `Translate the following text to ${targetLanguage}. Return ONLY the translated text without any explanations or additional comments:\n\n${text}`;
+
+  return await callGeminiAPI(prompt, settings.apiKey);
+}
+
+async function handleEnhancePrompt(text: string): Promise<string> {
+  // Get API key from storage
+  const settings = await chrome.storage.sync.get(["apiKey"]);
+
+  if (!settings.apiKey) {
+    throw new Error("Please set your Gemini API key in the extension options.");
+  }
+
+  const prompt = `Enhance the following prompt to be more detailed and effective for large language models. Return ONLY the enhanced prompt without any explanations or additional comments:\n\n${text}`;
 
   return await callGeminiAPI(prompt, settings.apiKey);
 }

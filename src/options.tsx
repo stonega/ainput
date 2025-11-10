@@ -50,7 +50,9 @@ const Options = () => {
     const updatedSites = disabledSites.filter((site) => site !== siteToRemove);
     chrome.storage.sync.set({ disabledSites: updatedSites }, () => {
       setDisabledSites(updatedSites);
-      setDisabledListStatus(`Successfully removed ${siteToRemove} from the disabled list.`);
+      setDisabledListStatus(
+        `Successfully removed ${siteToRemove} from the disabled list.`
+      );
       setTimeout(() => setDisabledListStatus(""), 3000);
     });
   };
@@ -303,7 +305,10 @@ const Options = () => {
               {disabledSites.map((site) => (
                 <li key={site} style={disabledListItemStyle}>
                   <span>{site}</span>
-                  <button onClick={() => removeSite(site)} style={removeButtonStyle}>
+                  <button
+                    onClick={() => removeSite(site)}
+                    style={removeButtonStyle}
+                  >
                     Remove
                   </button>
                 </li>

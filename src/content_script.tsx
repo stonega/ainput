@@ -1,10 +1,16 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
-import { MdTranslate, MdAutoFixHigh, MdHourglassEmpty } from "react-icons/md";
+import {
+  MdTranslate,
+  MdAutoFixHigh,
+  MdHourglassEmpty,
+  MdAutoAwesome,
+} from "react-icons/md";
 
 interface ButtonContainerProps {
   onFixGrammar: () => void;
   onTranslate: () => void;
+  onEnhancePrompt: () => void;
   loading: boolean;
 }
 
@@ -17,10 +23,12 @@ interface MessageResponse {
 const ButtonContainer: React.FC<ButtonContainerProps> = ({
   onFixGrammar,
   onTranslate,
+  onEnhancePrompt,
   loading,
 }) => {
   const [hoverFix, setHoverFix] = React.useState(false);
   const [hoverTranslate, setHoverTranslate] = React.useState(false);
+  const [hoverEnhance, setHoverEnhance] = React.useState(false);
 
   const buttonStyle: React.CSSProperties = {
     display: "flex",
@@ -94,6 +102,21 @@ const ButtonContainer: React.FC<ButtonContainerProps> = ({
       >
         <MdTranslate size={16} color="#41A67E" />
         <span>Translate</span>
+      </button>
+      <button
+        onClick={onEnhancePrompt}
+        disabled={loading}
+        onMouseEnter={() => setHoverEnhance(true)}
+        onMouseLeave={() => setHoverEnhance(false)}
+        style={{
+          ...buttonStyle,
+          backgroundColor: hoverEnhance ? "#f0f0f0" : "transparent",
+          cursor: loading ? "not-allowed" : "pointer",
+          opacity: loading ? 0.6 : 1,
+        }}
+      >
+        <MdAutoAwesome size={16} color="#D4AF37" />
+        <span style={{ whiteSpace: "nowrap" }}>Enhance Prompt</span>
       </button>
     </div>
   );
@@ -231,7 +254,7 @@ const InputAccessory: React.FC<{
   }, [textToAnimate, inputElement, setLoading]);
 
   const handleAction = async (
-    action: "fixGrammar" | "translate",
+    action: "fixGrammar" | "translate" | "enhancePrompt",
     element: EditableElement
   ) => {
     const text = "value" in element ? element.value : element.textContent || "";
@@ -269,6 +292,7 @@ const InputAccessory: React.FC<{
 
   const onFixGrammar = () => handleAction("fixGrammar", inputElement);
   const onTranslate = () => handleAction("translate", inputElement);
+  const onEnhancePrompt = () => handleAction("enhancePrompt", inputElement);
 
   return (
     <div
@@ -304,6 +328,7 @@ const InputAccessory: React.FC<{
           <ButtonContainer
             onFixGrammar={onFixGrammar}
             onTranslate={onTranslate}
+            onEnhancePrompt={onEnhancePrompt}
             loading={loading}
           />
         </div>
@@ -568,7 +593,8 @@ const handleShortcut = async (action: "fixGrammar" | "translate") => {
   let selectionEnd: number | null = null;
 
   const isInputElement =
-    element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement;
+    element instanceof HTMLInputElement ||
+    element instanceof HTMLTextAreaElement;
 
   if (isInputElement) {
     selectionStart = element.selectionStart;
