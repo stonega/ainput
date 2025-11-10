@@ -1,0 +1,24 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+      - run: npm ci
+      - run: npm run build
+      - name: Pack extension
+        run: npx bestzip ainput_chrome_${{ github.ref_name }}.zip dist/*
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ainput_chrome_${{ github.ref_name }}.zip
