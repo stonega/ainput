@@ -22,7 +22,7 @@ A powerful Chrome extension that enhances text input on any web page using Googl
 * TypeScript
 * React 18
 * Webpack 5
-* Google Gemini 2.0 Flash API
+* Google Gemini 2.5 Flash API
 * Chrome Extension Manifest V3
 
 ## Installation
