@@ -1,15 +1,16 @@
-# AInput - Chrome Extension
-
-A powerful Chrome extension that enhances text input on any web page using Google's Gemini 2.5 Flash AI model. Features include grammar fixing and translation to multiple languages.
-
 ![AInput Screenshot](screenshots/banner.png)
+
+[![Chrome Web Store](https://img.shields.io/chrome-web-store/v/paleeakmljeofbpnnbnkllpbigccecnh.svg)](https://chromewebstore.google.com/detail/ainput/paleeakmljeofbpnnbnkllpbigccecnh)
+
+AInput, a powerful Chrome extension that enhances text input on any web page using Google's Gemini 2.5 Flash AI model. Features include grammar fixing and translation to multiple languages.
+
 
 ## Features
 
-✨ **Fix Grammar** - Automatically fix grammar and spelling errors in your text  
-🌐 **Translate** - Translate text to your preferred language  
-⚡ **Real-time Processing** - Instant AI-powered text enhancement  
-🎯 **Universal** - Works on any text input or textarea on the web  
+✨ **Fix Grammar** - Automatically fix grammar and spelling errors in your text
+🌐 **Translate** - Translate text to your preferred language
+⚡ **Real-time Processing** - Instant AI-powered text enhancement
+🎯 **Universal** - Works on any text input or textarea on the web
 🔒 **Privacy-focused** - Uses your own Gemini API key
 
 ## Prerequisites
