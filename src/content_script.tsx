@@ -147,6 +147,7 @@ type EditableElement = HTMLInputElement | HTMLTextAreaElement | HTMLElement;
 
 let activeInput: EditableElement | null = null;
 let accessoryContainer: HTMLDivElement | null = null;
+let removeListeners: (() => void) | null = null;
 
 const InputAccessory: React.FC<{
   inputElement: EditableElement;
@@ -535,18 +536,36 @@ function showAccessoryFor(element: EditableElement) {
 
   positionAccessory(element, accessoryContainer);
 
-  const updatePosition = () => positionAccessory(element, accessoryContainer!);
+  const updatePosition = () => {
+    if (accessoryContainer) {
+      positionAccessory(element, accessoryContainer);
+    }
+  };
 
   element.addEventListener("input", updatePosition);
   element.addEventListener("keyup", updatePosition);
   element.addEventListener("mousedown", updatePosition);
   element.addEventListener("scroll", updatePosition);
   window.addEventListener("resize", updatePosition);
+
+  removeListeners = () => {
+    element.removeEventListener("input", updatePosition);
+    element.removeEventListener("keyup", updatePosition);
+    element.removeEventListener("mousedown", updatePosition);
+    element.removeEventListener("scroll", updatePosition);
+    window.removeEventListener("resize", updatePosition);
+  };
 }
 
 function hideAccessory() {
+  if (removeListeners) {
+    removeListeners();
+    removeListeners = null;
+  }
   if (accessoryContainer) {
-    document.body.removeChild(accessoryContainer);
+    if (document.body.contains(accessoryContainer)) {
+      document.body.removeChild(accessoryContainer);
+    }
     accessoryContainer = null;
   }
   activeInput = null;
