@@ -2,6 +2,74 @@ import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { IoSettingsOutline } from "react-icons/io5";
 
+interface ToggleSwitchProps {
+  label: string;
+  enabled: boolean;
+  onToggle: () => void;
+  disabled?: boolean;
+  isLoading?: boolean;
+}
+
+const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
+  label,
+  enabled,
+  onToggle,
+  disabled = false,
+  isLoading = false,
+}) => {
+  const toggleContainerStyle: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: "12px 0",
+    opacity: disabled || isLoading ? 0.6 : 1,
+    cursor: disabled || isLoading ? "not-allowed" : "pointer",
+  };
+
+  const labelTextStyle: React.CSSProperties = {
+    fontSize: "14px",
+    fontWeight: 500,
+    color: "#333",
+  };
+
+  const switchStyle: React.CSSProperties = {
+    position: "relative",
+    width: "40px",
+    height: "22px",
+    backgroundColor: enabled ? "#00B1F2" : "#bdc3c7",
+    borderRadius: "11px",
+    transition: "background-color 0.2s ease-in-out",
+  };
+
+  const knobStyle: React.CSSProperties = {
+    position: "absolute",
+    top: "2px",
+    left: enabled ? "20px" : "2px",
+    width: "18px",
+    height: "18px",
+    backgroundColor: "white",
+    borderRadius: "50%",
+    transition: "left 0.2s ease-in-out",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+  };
+
+  return (
+    <label style={toggleContainerStyle} onClick={disabled || isLoading ? undefined : onToggle}>
+      <span style={labelTextStyle}>{label}</span>
+      <div style={switchStyle}>
+        <div style={knobStyle}></div>
+      </div>
+      <input
+        type="checkbox"
+        checked={enabled}
+        onChange={onToggle}
+        disabled={disabled || isLoading}
+        style={{ display: "none" }}
+      />
+    </label>
+  );
+};
+
 export const Popup = () => {
   const [currentOrigin, setCurrentOrigin] = useState<string>();
   const [activeTabId, setActiveTabId] = useState<number>();
@@ -135,135 +203,65 @@ export const Popup = () => {
   const containerStyle: React.CSSProperties = {
     fontFamily:
       '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"',
-    padding: "0px 10px",
-    minWidth: "280px",
-    textAlign: "center",
-    backgroundColor: "#ffffff",
+    padding: "16px",
+    minWidth: "300px",
+    backgroundColor: "#f9f9f9",
     color: "#333",
   };
 
+  const headerStyle: React.CSSProperties = {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: "12px",
+  };
+
   const titleStyle: React.CSSProperties = {
-    fontSize: "20px",
-    fontWeight: 600,
+    fontSize: "22px",
+    fontWeight: 700,
     color: "#00B1F2",
+    margin: 0,
   };
 
   const descriptionStyle: React.CSSProperties = {
-    fontSize: "14px",
-    marginBottom: "20px",
+    fontSize: "13px",
+    marginBottom: "16px",
     lineHeight: "1.5",
     color: "#555",
   };
 
-  const labelStyle: React.CSSProperties = {
-    display: "inline-flex",
-    alignItems: "center",
-    cursor: isLoading ? "not-allowed" : "pointer",
-    opacity: isLoading ? 0.6 : 1,
-    marginBottom: "10px",
-  };
-
-  const toggleSwitchStyle: React.CSSProperties = {
-    position: "relative",
-    width: "44px",
-    height: "24px",
-    backgroundColor: isDisabled ? "#bdc3c7" : "#2196F3",
-    borderRadius: "12px",
-    transition: "background-color 0.2s ease-in-out",
-  };
-
-  const toggleKnobStyle: React.CSSProperties = {
-    position: "absolute",
-    top: "2px",
-    left: isDisabled ? "2px" : "22px",
-    width: "20px",
-    height: "20px",
-    backgroundColor: "white",
-    borderRadius: "50%",
-    transition: "left 0.2s ease-in-out",
-    boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
-  };
-
-  const statusTextStyle: React.CSSProperties = {
-    marginLeft: "12px",
-    userSelect: "none",
-    fontSize: "14px",
-    fontWeight: 500,
-    color: isDisabled ? "#7f8c8d" : "#2c3e50",
-  };
-
   return (
     <div style={containerStyle}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          position: "relative",
-          width: "100%",
-        }}
-      >
+      <header style={headerStyle}>
         <h1 style={titleStyle}>AINPUT</h1>
         <button
           onClick={openOptionsPage}
-          style={{
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-          }}
+          style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
           title="Settings"
         >
-          <IoSettingsOutline color="#00B1F2" size={20} />
+          <IoSettingsOutline color="#00B1F2" size={24} />
         </button>
-      </div>
+      </header>
       <p style={descriptionStyle}>
-        Control whether the extension is active on{" "}
-        <strong>{currentOrigin || "this page"}</strong>.
+        Control settings for <strong>{currentOrigin || "this page"}</strong>.
       </p>
-      <label style={labelStyle}>
-        <input
-          type="checkbox"
-          checked={!isDisabled}
-          onChange={handleToggleExtension}
-          disabled={isLoading}
-          style={{ display: "none" }}
+      
+      <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '4px 16px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+        <ToggleSwitch
+          label={isDisabled ? "Extension Disabled" : "Extension Enabled"}
+          enabled={!isDisabled}
+          onToggle={handleToggleExtension}
+          isLoading={isLoading}
         />
-        <span style={toggleSwitchStyle}>
-          <span style={toggleKnobStyle}></span>
-        </span>
-        <span style={statusTextStyle}>
-          {isLoading
-            ? "Loading..."
-            : isDisabled
-            ? "Extension Disabled"
-            : "Extension Enabled"}
-        </span>
-      </label>
-      <label style={{...labelStyle, opacity: isDisabled ? 0.5 : 1}}>
-        <input
-          type="checkbox"
-          checked={isAutoReplyEnabled || false}
-          onChange={handleToggleAutoReply}
-          disabled={isLoading || isDisabled}
-          style={{ display: "none" }}
+        <div style={{ height: '1px', backgroundColor: '#eee', margin: '2px 0' }}></div>
+        <ToggleSwitch
+          label={isAutoReplyEnabled ? "Auto Reply Enabled" : "Auto Reply Disabled"}
+          enabled={isAutoReplyEnabled || false}
+          onToggle={handleToggleAutoReply}
+          disabled={isDisabled || false}
+          isLoading={isLoading}
         />
-        <span style={{
-          ...toggleSwitchStyle,
-          backgroundColor: isAutoReplyEnabled ? "#2196F3" : "#bdc3c7"
-        }}>
-          <span style={{
-            ...toggleKnobStyle,
-            left: isAutoReplyEnabled ? "22px" : "2px"
-          }}></span>
-        </span>
-        <span style={statusTextStyle}>
-          {isLoading
-            ? "Loading..."
-            : isAutoReplyEnabled
-            ? "Auto Reply Enabled"
-            : "Auto Reply Disabled"}
-        </span>
-      </label>
+      </div>
     </div>
   );
 };
