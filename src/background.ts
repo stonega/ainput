@@ -1,5 +1,7 @@
 // Background script for handling Gemini API calls
 
+import { addTokenUsage } from "./db";
+
 interface GeminiResponse {
   candidates?: Array<{
     content: {
@@ -8,6 +10,11 @@ interface GeminiResponse {
       }>;
     };
   }>;
+  usageMetadata?: {
+    promptTokenCount: number;
+    candidatesTokenCount: number;
+    totalTokenCount: number;
+  };
   error?: {
     message: string;
   };
@@ -19,12 +26,21 @@ interface OpenAIResponse {
       content: string;
     };
   }>;
+  usage?: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
   error?: {
     message: string;
   };
 }
 
-async function callGeminiAPI(prompt: string, apiKey: string): Promise<string> {
+async function callGeminiAPI(
+  prompt: string,
+  apiKey: string,
+  kind: string
+): Promise<string> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
   const response = await fetch(url, {
@@ -51,6 +67,15 @@ async function callGeminiAPI(prompt: string, apiKey: string): Promise<string> {
 
   const data: GeminiResponse = await response.json();
 
+  if (data.usageMetadata) {
+    addTokenUsage({
+      date: new Date().toISOString(),
+      model: "gemini-2.5-flash",
+      kind,
+      tokens: data.usageMetadata.totalTokenCount,
+    });
+  }
+
   if (data.error) {
     if (data.error.message.toLowerCase().includes("quota")) {
       throw new Error("You have exceeded your Gemini API quota.");
@@ -74,7 +99,8 @@ async function callOpenAIAPI(
   apiKey: string,
   baseUrl: string,
   model: string,
-  isCustom: boolean
+  isCustom: boolean,
+  kind: string
 ): Promise<string> {
   const url = `${baseUrl}/v1/chat/completions`;
   const headers: Record<string, string> = {
@@ -100,6 +126,15 @@ async function callOpenAIAPI(
 
   const data: OpenAIResponse = await response.json();
 
+  if (data.usage) {
+    addTokenUsage({
+      date: new Date().toISOString(),
+      model: model,
+      kind,
+      tokens: data.usage.total_tokens,
+    });
+  }
+
   if (data.error) {
     throw new Error(data.error.message);
   }
@@ -115,7 +150,7 @@ async function callOpenAIAPI(
   return data.choices[0].message.content;
 }
 
-async function callApi(prompt: string): Promise<string> {
+async function callApi(prompt: string, kind: string): Promise<string> {
   const settings = await chrome.storage.sync.get([
     "models",
     "activeModelId",
@@ -131,7 +166,7 @@ async function callApi(prompt: string): Promise<string> {
     }
 
     if (activeModel.type === "gemini") {
-      return callGeminiAPI(prompt, activeModel.apiKey);
+      return callGeminiAPI(prompt, activeModel.apiKey, kind);
     } else if (
       activeModel.type === "openai" ||
       activeModel.type === "openrouter" ||
@@ -142,7 +177,8 @@ async function callApi(prompt: string): Promise<string> {
         activeModel.apiKey,
         activeModel.baseUrl,
         activeModel.model,
-        activeModel.type === "custom"
+        activeModel.type === "custom",
+        kind
       );
     } else {
       throw new Error(`Unsupported model type: ${activeModel.type}`);
@@ -151,7 +187,7 @@ async function callApi(prompt: string): Promise<string> {
     throw new Error("Please select an active model in the extension options.");
   } else if (settings.apiKey) {
     // Legacy support for old settings
-    return callGeminiAPI(prompt, settings.apiKey);
+    return callGeminiAPI(prompt, settings.apiKey, "legacy");
   } else {
     throw new Error(
       "No API key or model configured. Please set your API key in the extension options."
@@ -192,7 +228,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 async function handleFixGrammar(text: string): Promise<string> {
   const prompt = `Fix the grammar and spelling in the following text. Return ONLY the corrected text without any explanations or additional comments:\n\n${text}`;
 
-  return await callApi(prompt);
+  return await callApi(prompt, "fixGrammar");
 }
 
 async function handleTranslate(text: string): Promise<string> {
@@ -203,19 +239,19 @@ async function handleTranslate(text: string): Promise<string> {
 
   const prompt = `Translate the following text to ${targetLanguage}. Return ONLY the translated text without any explanations or additional comments:\n\n${text}`;
 
-  return await callApi(prompt);
+  return await callApi(prompt, "translate");
 }
 
 async function handleEnhancePrompt(text: string): Promise<string> {
   const prompt = `Enhance the following prompt to be more detailed and effective for large language models. Return ONLY the enhanced prompt without any explanations or additional comments:\n\n${text}`;
 
-  return await callApi(prompt);
+  return await callApi(prompt, "enhancePrompt");
 }
 
 async function handleAutoReply(pageContent: string): Promise<string> {
   const prompt = `Based on the following page content, generate a concise and relevant reply. The reply should be suitable for a comment or a short message. Return only the suggested reply, without any introductory phrases like "Here's a reply:" or any other explanations.\n\nPage Content:\n"""\n${pageContent}\n"""\n\nSuggested Reply:`;
 
-  return await callApi(prompt);
+  return await callApi(prompt, "autoReply");
 }
 
 chrome.commands.onCommand.addListener((command) => {

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { FaGithub, FaTrash } from "react-icons/fa";
+import { FaArrowLeft, FaArrowRight, FaGithub, FaTrash } from "react-icons/fa";
+import { getTokenUsage } from "./db";
 
 interface Model {
   id: string;
@@ -11,9 +12,20 @@ interface Model {
   model?: string;
 }
 
+interface TokenUsage {
+  id?: number;
+  date: string;
+  model: string;
+  kind: string;
+  tokens: number;
+}
+
 const Options = () => {
   const [models, setModels] = useState<Model[]>([]);
   const [activeModelId, setActiveModelId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"models" | "settings" | "usage">(
+    "models"
+  );
 
   const [newModelType, setNewModelType] = useState<
     "gemini" | "openai" | "openrouter" | "custom"
@@ -28,6 +40,11 @@ const Options = () => {
   const [disabledListStatus, setDisabledListStatus] = useState<string>("");
   const [disabledSites, setDisabledSites] = useState<string[]>([]);
   const [autoReplyEnabled, setAutoReplyEnabled] = useState<boolean>(false);
+
+  const [usageData, setUsageData] = useState<TokenUsage[]>([]);
+  const [usagePage, setUsagePage] = useState<number>(1);
+  const [usageTotal, setUsageTotal] = useState<number>(0);
+  const usagePageSize = 10;
 
   useEffect(() => {
     chrome.storage.sync.get(
@@ -64,7 +81,17 @@ const Options = () => {
         setAutoReplyEnabled(items.autoReplyEnabled);
       }
     );
-  }, []);
+
+    if (activeTab === "usage") {
+      loadUsageData();
+    }
+  }, [activeTab, usagePage]);
+
+  const loadUsageData = async () => {
+    const { data, total } = await getTokenUsage(usagePage, usagePageSize);
+    setUsageData(data);
+    setUsageTotal(total);
+  };
 
   const saveGeneralSettings = () => {
     chrome.storage.sync.set(
@@ -205,6 +232,20 @@ const Options = () => {
     margin: 0,
   };
 
+  const tabStyle: React.CSSProperties = {
+    padding: "10px 20px",
+    cursor: "pointer",
+    borderBottom: "2px solid transparent",
+    color: "#666",
+  };
+
+  const activeTabStyle: React.CSSProperties = {
+    ...tabStyle,
+    borderBottom: "2px solid #00B1F2",
+    color: "#00B1F2",
+    fontWeight: 600,
+  };
+
   const cardStyle: React.CSSProperties = {
     backgroundColor: "white",
     borderRadius: "8px",
@@ -269,6 +310,16 @@ const Options = () => {
     fontWeight: 600,
     transition: "background-color 0.2s",
   };
+  const iconButtonStyle: React.CSSProperties = {
+    border: 'none',
+    backgroundColor: 'transparent',
+    color: '#333',
+    borderRadius: '50%',
+    cursor: 'pointer',
+    fontSize: '12px',
+    padding: '5px',
+    transition: 'background-color 0.2s',
+  }
 
   const removeButtonStyle: React.CSSProperties = {
     ...buttonStyle,
@@ -384,236 +435,324 @@ const Options = () => {
           <h1 style={titleStyle}>AINPUT</h1>
         </header>
 
-        <div style={cardStyle}>
-          <h3 style={howToUseTitleStyle}>AI Models</h3>
-          {models.map((model) => (
+        <div style={{ display: "flex", marginBottom: "20px" }}>
+          <div
+            style={activeTab === "models" ? activeTabStyle : tabStyle}
+            onClick={() => setActiveTab("models")}
+          >
+            Models
+          </div>
+          <div
+            style={activeTab === "settings" ? activeTabStyle : tabStyle}
+            onClick={() => setActiveTab("settings")}
+          >
+            Settings
+          </div>
+          <div
+            style={activeTab === "usage" ? activeTabStyle : tabStyle}
+            onClick={() => setActiveTab("usage")}
+          >
+            Usage
+          </div>
+        </div>
+
+        {activeTab === "models" && (
+          <div style={cardStyle}>
+            <h3 style={howToUseTitleStyle}>AI Models</h3>
+            {models.map((model) => (
+              <div
+                key={model.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "10px 0",
+                  borderBottom: "1px solid #eee",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center" }}>
+                  <input
+                    type="radio"
+                    id={`model-${model.id}`}
+                    name="activeModel"
+                    checked={activeModelId === model.id}
+                    onChange={() => handleSetActiveModel(model.id)}
+                    style={{ marginRight: "10px" }}
+                  />
+                  <label htmlFor={`model-${model.id}`}>{model.name}</label>
+                </div>
+                <button
+                  onClick={() => deleteModel(model.id)}
+                  style={deleteButtonStyle}
+                  title="Delete Model"
+                >
+                  <FaTrash />
+                </button>
+              </div>
+            ))}
+
             <div
-              key={model.id}
               style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                padding: "10px 0",
-                borderBottom: "1px solid #eee",
+                marginTop: "20px",
+                paddingTop: "20px",
+                borderTop: "1px solid #eee",
               }}
             >
-              <div style={{ display: "flex", alignItems: "center" }}>
-                <input
-                  type="radio"
-                  id={`model-${model.id}`}
-                  name="activeModel"
-                  checked={activeModelId === model.id}
-                  onChange={() => handleSetActiveModel(model.id)}
-                  style={{ marginRight: "10px" }}
-                />
-                <label htmlFor={`model-${model.id}`}>{model.name}</label>
-              </div>
-              <button
-                onClick={() => deleteModel(model.id)}
-                style={deleteButtonStyle}
-                title="Delete Model"
+              <h4
+                style={{ marginTop: 0, marginBottom: "15px", color: "#333" }}
               >
-                <FaTrash />
-              </button>
-            </div>
-          ))}
-
-          <div style={{ marginTop: "20px", paddingTop: "20px", borderTop: "1px solid #eee" }}>
-            <h4 style={{ marginTop: 0, marginBottom: "15px", color: "#333" }}>
-              Add New Model
-            </h4>
-            <div style={formGroupStyle}>
-              <label style={labelStyle}>Model Type:</label>
-              <select
-                value={newModelType}
-                onChange={(e) =>
-                  setNewModelType(
-                    e.target.value as
-                      | "gemini"
-                      | "openai"
-                      | "openrouter"
-                      | "custom"
-                  )
-                }
-                style={inputStyle}
-              >
-                <option value="gemini">Gemini</option>
-                <option value="openai">OpenAI</option>
-                <option value="openrouter">OpenRouter</option>
-                <option value="custom">Custom (OpenAI Comp)</option>
-              </select>
-            </div>
-            <div style={formGroupStyle}>
-              <label style={labelStyle}>Model Name:</label>
-              <input
-                type="text"
-                value={newModelName}
-                onChange={(e) => setNewModelName(e.target.value)}
-                placeholder="e.g., My Personal GPT"
-                style={inputStyle}
-              />
-            </div>
-            <div style={formGroupStyle}>
-              <label style={labelStyle}>API Key:</label>
-              <input
-                type="password"
-                value={newModelApiKey}
-                onChange={(e) => setNewModelApiKey(e.target.value)}
-                placeholder="Enter your API key"
-                style={inputStyle}
-              />
-            </div>
-            {newModelType === "custom" && (
+                Add New Model
+              </h4>
               <div style={formGroupStyle}>
-                <label style={labelStyle}>Base URL:</label>
-                <input
-                  type="text"
-                  value={newModelBaseUrl}
-                  onChange={(e) => setNewModelBaseUrl(e.target.value)}
-                  placeholder="https://api.custom.dev"
-                  style={inputStyle}
-                />
-              </div>
-            )}
-            {(newModelType === "openai" ||
-              newModelType === "openrouter" ||
-              newModelType === "custom") && (
-              <div style={formGroupStyle}>
-                <label style={labelStyle}>Model String:</label>
-                <input
-                  type="text"
-                  value={newModelString}
-                  onChange={(e) => setNewModelString(e.target.value)}
-                  placeholder={
-                    newModelType === "openai"
-                      ? "gpt-4"
-                      : newModelType === "openrouter"
-                      ? "google/gemini-pro-2.5"
-                      : "custom-model"
+                <label style={labelStyle}>Model Type:</label>
+                <select
+                  value={newModelType}
+                  onChange={(e) =>
+                    setNewModelType(
+                      e.target.value as
+                        | "gemini"
+                        | "openai"
+                        | "openrouter"
+                        | "custom"
+                    )
                   }
                   style={inputStyle}
-                />
-              </div>
-            )}
-            <button onClick={addModel} style={buttonStyle}>
-              Add Model
-            </button>
-          </div>
-        </div>
-
-        <div style={cardStyle}>
-          <h3 style={howToUseTitleStyle}>General Settings</h3>
-          <div style={formGroupStyle}>
-            <label style={labelStyle}>Target Language for Translation:</label>
-            <select
-              value={targetLanguage}
-              onChange={(event) => setTargetLanguage(event.target.value)}
-              style={inputStyle}
-            >
-              <option value="English">English</option>
-              <option value="Spanish">Spanish</option>
-              <option value="French">French</option>
-              <option value="German">German</option>
-              <option value="Italian">Italian</option>
-              <option value="Portuguese">Portuguese</option>
-              <option value="Russian">Russian</option>
-              <option value="Japanese">Japanese</option>
-              <option value="Korean">Korean</option>
-              <option value="Chinese (Simplified)">Chinese (Simplified)</option>
-              <option value="Chinese (Traditional)">
-                Chinese (Traditional)
-              </option>
-              <option value="Arabic">Arabic</option>
-              <option value="Hindi">Hindi</option>
-              <option value="Dutch">Dutch</option>
-              <option value="Polish">Polish</option>
-              <option value="Turkish">Turkish</option>
-              <option value="Vietnamese">Vietnamese</option>
-              <option value="Thai">Thai</option>
-              <option value="Indonesian">Indonesian</option>
-            </select>
-          </div>
-
-          <div style={formGroupStyle}>
-            <label style={labelStyle}>Auto Reply:</label>
-            <div style={{ display: "flex", alignItems: "center" }}>
-              <label style={toggleSwitchStyle}>
-                <input
-                  type="checkbox"
-                  checked={autoReplyEnabled}
-                  onChange={(e) => handleAutoReplyChange(e.target.checked)}
-                  style={toggleSwitchInputStyle}
-                />
-                <span
-                  style={{
-                    ...sliderStyle,
-                    backgroundColor: autoReplyEnabled ? "#00B1F2" : "#ccc",
-                  }}
                 >
-                  <span
-                    style={{
-                      ...sliderBeforeStyle,
-                      transform: autoReplyEnabled
-                        ? "translateX(20px)"
-                        : "translateX(0)",
-                    }}
+                  <option value="gemini">Gemini</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="openrouter">OpenRouter</option>
+                  <option value="custom">Custom (OpenAI Comp)</option>
+                </select>
+              </div>
+              <div style={formGroupStyle}>
+                <label style={labelStyle}>Model Name:</label>
+                <input
+                  type="text"
+                  value={newModelName}
+                  onChange={(e) => setNewModelName(e.target.value)}
+                  placeholder="e.g., My Personal GPT"
+                  style={inputStyle}
+                />
+              </div>
+              <div style={formGroupStyle}>
+                <label style={labelStyle}>API Key:</label>
+                <input
+                  type="password"
+                  value={newModelApiKey}
+                  onChange={(e) => setNewModelApiKey(e.target.value)}
+                  placeholder="Enter your API key"
+                  style={inputStyle}
+                />
+              </div>
+              {newModelType === "custom" && (
+                <div style={formGroupStyle}>
+                  <label style={labelStyle}>Base URL:</label>
+                  <input
+                    type="text"
+                    value={newModelBaseUrl}
+                    onChange={(e) => setNewModelBaseUrl(e.target.value)}
+                    placeholder="https://api.custom.dev"
+                    style={inputStyle}
                   />
-                </span>
-              </label>
-              <span style={{ marginLeft: "12px", color: "#555" }}>
-                {autoReplyEnabled ? "Enabled" : "Disabled"}
-              </span>
+                </div>
+              )}
+              {(newModelType === "openai" ||
+                newModelType === "openrouter" ||
+                newModelType === "custom") && (
+                <div style={formGroupStyle}>
+                  <label style={labelStyle}>Model String:</label>
+                  <input
+                    type="text"
+                    value={newModelString}
+                    onChange={(e) => setNewModelString(e.target.value)}
+                    placeholder={
+                      newModelType === "openai"
+                        ? "gpt-4"
+                        : newModelType === "openrouter"
+                        ? "google/gemini-pro-2.5"
+                        : "custom-model"
+                    }
+                    style={inputStyle}
+                  />
+                </div>
+              )}
+              <button onClick={addModel} style={buttonStyle}>
+                Add Model
+              </button>
             </div>
-            <p style={hintStyle}>
-              Automatically suggest a reply when you focus on an empty input
-              field.
-            </p>
           </div>
+        )}
 
-          <button onClick={saveGeneralSettings} style={buttonStyle}>
-            Save Settings
-          </button>
+        {activeTab === "settings" && (
+          <>
+            <div style={cardStyle}>
+              <h3 style={howToUseTitleStyle}>General Settings</h3>
+              <div style={formGroupStyle}>
+                <label style={labelStyle}>
+                  Target Language for Translation:
+                </label>
+                <select
+                  value={targetLanguage}
+                  onChange={(event) => setTargetLanguage(event.target.value)}
+                  style={inputStyle}
+                >
+                  <option value="English">English</option>
+                  <option value="Spanish">Spanish</option>
+                  <option value="French">French</option>
+                  <option value="German">German</option>
+                  <option value="Italian">Italian</option>
+                  <option value="Portuguese">Portuguese</option>
+                  <option value="Russian">Russian</option>
+                  <option value="Japanese">Japanese</option>
+                  <option value="Korean">Korean</option>
+                  <option value="Chinese (Simplified)">Chinese (Simplified)</option>
+                  <option value="Chinese (Traditional)">
+                    Chinese (Traditional)
+                  </option>
+                  <option value="Arabic">Arabic</option>
+                  <option value="Hindi">Hindi</option>
+                  <option value="Dutch">Dutch</option>
+                  <option value="Polish">Polish</option>
+                  <option value="Turkish">Turkish</option>
+                  <option value="Vietnamese">Vietnamese</option>
+                  <option value="Thai">Thai</option>
+                  <option value="Indonesian">Indonesian</option>
+                </select>
+              </div>
 
-          {settingsStatus && (
-            <div
-              style={
-                settingsStatus.includes("success")
-                  ? successStatusStyle
-                  : errorStatusStyle
-              }
-            >
-              {settingsStatus}
+              <div style={formGroupStyle}>
+                <label style={labelStyle}>Auto Reply:</label>
+                <div style={{ display: "flex", alignItems: "center" }}>
+                  <label style={toggleSwitchStyle}>
+                    <input
+                      type="checkbox"
+                      checked={autoReplyEnabled}
+                      onChange={(e) => handleAutoReplyChange(e.target.checked)}
+                      style={toggleSwitchInputStyle}
+                    />
+                    <span
+                      style={{
+                        ...sliderStyle,
+                        backgroundColor: autoReplyEnabled ? "#00B1F2" : "#ccc",
+                      }}
+                    >
+                      <span
+                        style={{
+                          ...sliderBeforeStyle,
+                          transform: autoReplyEnabled
+                            ? "translateX(20px)"
+                            : "translateX(0)",
+                        }}
+                      />
+                    </span>
+                  </label>
+                  <span style={{ marginLeft: "12px", color: "#555" }}>
+                    {autoReplyEnabled ? "Enabled" : "Disabled"}
+                  </span>
+                </div>
+                <p style={hintStyle}>
+                  Automatically suggest a reply when you focus on an empty input
+                  field.
+                </p>
+              </div>
+
+              <button onClick={saveGeneralSettings} style={buttonStyle}>
+                Save Settings
+              </button>
+
+              {settingsStatus && (
+                <div
+                  style={
+                    settingsStatus.includes("success")
+                      ? successStatusStyle
+                      : errorStatusStyle
+                  }
+                >
+                  {settingsStatus}
+                </div>
+              )}
             </div>
-          )}
-        </div>
 
-        {disabledSites.length > 0 && (
-          <div style={cardStyle}>
-            <h3 style={howToUseTitleStyle}>Disabled Sites</h3>
-            <ul style={disabledListStyle}>
-              {disabledSites.map((site) => (
-                <li key={site} style={disabledListItemStyle}>
-                  <span>{site}</span>
-                  <button
-                    onClick={() => removeSite(site)}
-                    style={removeButtonStyle}
+            {disabledSites.length > 0 && (
+              <div style={cardStyle}>
+                <h3 style={howToUseTitleStyle}>Disabled Sites</h3>
+                <ul style={disabledListStyle}>
+                  {disabledSites.map((site) => (
+                    <li key={site} style={disabledListItemStyle}>
+                      <span>{site}</span>
+                      <button
+                        onClick={() => removeSite(site)}
+                        style={removeButtonStyle}
+                      >
+                        Remove
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                {disabledListStatus && (
+                  <div
+                    style={
+                      disabledListStatus.includes("success")
+                        ? successStatusStyle
+                        : errorStatusStyle
+                    }
                   >
-                    Remove
-                  </button>
-                </li>
-              ))}
-            </ul>
-            {disabledListStatus && (
-              <div
-                style={
-                  disabledListStatus.includes("success")
-                    ? successStatusStyle
-                    : errorStatusStyle
-                }
-              >
-                {disabledListStatus}
+                    {disabledListStatus}
+                  </div>
+                )}
               </div>
             )}
+          </>
+        )}
+
+        {activeTab === "usage" && (
+          <div style={cardStyle}>
+            <h3 style={howToUseTitleStyle}>Token Usage</h3>
+            <table
+              style={{
+                width: "100%",
+                borderCollapse: "collapse",
+                marginTop: "20px",
+              }}
+            >
+              <thead>
+                <tr>
+                  <th style={{ borderBottom: "1px solid #ddd", padding: "8px", textAlign: "left" }}>Date</th>
+                  <th style={{ borderBottom: "1px solid #ddd", padding: "8px", textAlign: "left" }}>Model</th>
+                  <th style={{ borderBottom: "1px solid #ddd", padding: "8px", textAlign: "left" }}>Kind</th>
+                  <th style={{ borderBottom: "1px solid #ddd", padding: "8px", textAlign: "left" }}>Tokens</th>
+                </tr>
+              </thead>
+              <tbody>
+                {usageData.map((item) => (
+                  <tr key={item.id}>
+                    <td style={{ borderBottom: "1px solid #ddd", padding: "8px" }}>{new Date(item.date).toLocaleString()}</td>
+                    <td style={{ borderBottom: "1px solid #ddd", padding: "8px" }}>{item.model}</td>
+                    <td style={{ borderBottom: "1px solid #ddd", padding: "8px" }}>{item.kind}</td>
+                    <td style={{ borderBottom: "1px solid #ddd", padding: "8px" }}>{item.tokens}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div style={{ marginTop: "20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <button
+                onClick={() => setUsagePage(usagePage - 1)}
+                disabled={usagePage === 1}
+                style={iconButtonStyle}
+              >
+                <FaArrowLeft />
+              </button>
+              <span>
+                Page {usagePage} of {Math.ceil(usageTotal / usagePageSize)}
+              </span>
+              <button
+                onClick={() => setUsagePage(usagePage + 1)}
+                disabled={usagePage * usagePageSize >= usageTotal}
+                style={iconButtonStyle}
+              >
+                <FaArrowRight />
+              </button>
+            </div>
           </div>
         )}
 

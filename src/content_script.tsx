@@ -39,11 +39,11 @@ const ButtonContainer: React.FC<ButtonContainerProps> = ({
     display: "flex",
     alignItems: "center",
     gap: "4px",
-    padding: "4px 6px",
+    padding: "8px 12px",
+    border: 'none',
     backgroundColor: "transparent",
     color: "#333",
-    border: "none",
-    borderRadius: "6px",
+    borderRadius: "8px",
     fontSize: "14px",
     fontWeight: "400",
     textAlign: "left",
@@ -59,7 +59,7 @@ const ButtonContainer: React.FC<ButtonContainerProps> = ({
           gap: "4px",
           padding: "8px 6px",
           color: "#333",
-          fontSize: "14px",
+          fontSize: "12px",
           whiteSpace: "nowrap",
         }}
       >
@@ -74,8 +74,8 @@ const ButtonContainer: React.FC<ButtonContainerProps> = ({
       style={{
         display: "flex",
         flexDirection: "column",
-        gap: "2px",
-        padding: "2px",
+        gap: "6px",
+        padding: "4px",
       }}
     >
       <button
@@ -372,8 +372,9 @@ const InputAccessory: React.FC<{
             left: "0px",
             zIndex: 10000,
             background: "white",
-            borderRadius: "8px",
-            boxShadow: "0 2px 12px rgba(0,0,0,0.2)",
+            borderRadius: "12px",
+            boxShadow: "0 2px 14px rgba(0,0,0,0.2)",
+            border: "1px solid #f9f9f9",
             padding: "4px",
           }}
         >
