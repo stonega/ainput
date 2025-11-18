@@ -5,12 +5,15 @@ import {
   MdAutoFixHigh,
   MdHourglassEmpty,
   MdAutoAwesome,
+  MdReply,
 } from "react-icons/md";
+import { Readability } from "@mozilla/readability";
 
 interface ButtonContainerProps {
   onFixGrammar: () => void;
   onTranslate: () => void;
   onEnhancePrompt: () => void;
+  onAutoReply: () => void;
   loading: boolean;
 }
 
@@ -24,11 +27,13 @@ const ButtonContainer: React.FC<ButtonContainerProps> = ({
   onFixGrammar,
   onTranslate,
   onEnhancePrompt,
+  onAutoReply,
   loading,
 }) => {
   const [hoverFix, setHoverFix] = React.useState(false);
   const [hoverTranslate, setHoverTranslate] = React.useState(false);
   const [hoverEnhance, setHoverEnhance] = React.useState(false);
+  const [hoverAutoReply, setHoverAutoReply] = React.useState(false);
 
   const buttonStyle: React.CSSProperties = {
     display: "flex",
@@ -102,6 +107,21 @@ const ButtonContainer: React.FC<ButtonContainerProps> = ({
       >
         <MdTranslate size={16} color="#41A67E" />
         <span>Translate</span>
+      </button>
+      <button
+        onClick={onAutoReply}
+        disabled={loading}
+        onMouseEnter={() => setHoverAutoReply(true)}
+        onMouseLeave={() => setHoverAutoReply(false)}
+        style={{
+          ...buttonStyle,
+          backgroundColor: hoverAutoReply ? "#f0f0f0" : "transparent",
+          cursor: loading ? "not-allowed" : "pointer",
+          opacity: loading ? 0.6 : 1,
+        }}
+      >
+        <MdReply size={16} color="#007BFF" />
+        <span style={{ whiteSpace: "nowrap" }}>Auto Reply</span>
       </button>
       <button
         onClick={onEnhancePrompt}
@@ -294,6 +314,38 @@ const InputAccessory: React.FC<{
   const onTranslate = () => handleAction("translate", inputElement);
   const onEnhancePrompt = () => handleAction("enhancePrompt", inputElement);
 
+  const onAutoReply = async () => {
+    setPopoverVisible(false);
+    setLoading(true);
+
+    try {
+      const documentClone = document.cloneNode(true) as Document;
+      const article = new Readability(documentClone).parse();
+      const pageContent = article?.textContent?.slice(0, 4000) || "";
+
+      const response = (await chrome.runtime.sendMessage({
+        action: "autoReply",
+        pageContent,
+      })) as unknown as MessageResponse;
+
+      if (response && response.success && response.result) {
+        if ("value" in inputElement) {
+          (inputElement as HTMLInputElement).value = "";
+        } else {
+          inputElement.textContent = "";
+        }
+        inputElement.dispatchEvent(new Event("input", { bubbles: true }));
+        setTextToAnimate(response.result);
+      } else {
+        alert("Error: " + (response?.error || `Failed to auto reply`));
+        setLoading(false);
+      }
+    } catch (error) {
+      alert("Error: " + String(error));
+      setLoading(false);
+    }
+  };
+
   return (
     <div
       ref={accessoryRef}
@@ -329,6 +381,7 @@ const InputAccessory: React.FC<{
             onFixGrammar={onFixGrammar}
             onTranslate={onTranslate}
             onEnhancePrompt={onEnhancePrompt}
+            onAutoReply={onAutoReply}
             loading={loading}
           />
         </div>
@@ -524,6 +577,73 @@ document.addEventListener(
     if (!isExtensionEnabled) return;
 
     const target = event.target as HTMLElement;
+
+    chrome.storage.sync.get({ autoReplyEnabled: false }, (items) => {
+      if (items.autoReplyEnabled) {
+        const isEditable =
+          target.tagName.toLowerCase() === "textarea" ||
+          (target instanceof HTMLInputElement &&
+            [
+              "text",
+              "email",
+              "search",
+              "tel",
+              "url",
+            ].includes(target.type)) ||
+          (target.isContentEditable &&
+            target.tagName.toLowerCase().includes("div"));
+
+        if (isEditable) {
+          const text =
+            "value" in target ? (target as HTMLInputElement).value : target.textContent || "";
+          if (!text.trim()) {
+            const documentClone = document.cloneNode(true) as Document;
+            const article = new Readability(documentClone).parse();
+            const pageContent = article?.textContent?.slice(0, 4000) || "";
+            target.dispatchEvent(new Event("ainput-loading-start"));
+            chrome.runtime.sendMessage(
+              {
+                action: "autoReply",
+                pageContent,
+              },
+              (response: MessageResponse) => {
+                if (chrome.runtime.lastError) {
+                  console.error(
+                    "AInput Auto Reply Error:",
+                    chrome.runtime.lastError.message
+                  );
+                  target.dispatchEvent(new Event("ainput-loading-end"));
+                  return;
+                }
+
+                if (response && response.success && response.result) {
+                  if ("value" in target) {
+                    (target as HTMLInputElement).value = "";
+                  } else {
+                    target.textContent = "";
+                  }
+                  target.dispatchEvent(new Event("input", { bubbles: true }));
+                  // Not using the animated text for now for auto-reply
+                  if ("value" in target) {
+                    (target as HTMLInputElement).value = response.result;
+                  } else {
+                    target.textContent = response.result;
+                  }
+                  target.dispatchEvent(new Event("input", { bubbles: true }));
+                } else {
+                  // Don't alert on auto-reply failure, just log it.
+                  console.error(
+                    "AInput Auto Reply Error:",
+                    response?.error || "Failed to get auto-reply"
+                  );
+                }
+                target.dispatchEvent(new Event("ainput-loading-end"));
+              }
+            );
+          }
+        }
+      }
+    });
 
     if (target.tagName.toLowerCase() === "textarea") {
       showAccessoryFor(target as HTMLTextAreaElement);

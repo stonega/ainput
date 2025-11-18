@@ -8,6 +8,7 @@ const Options = () => {
   const [settingsStatus, setSettingsStatus] = useState<string>("");
   const [disabledListStatus, setDisabledListStatus] = useState<string>("");
   const [disabledSites, setDisabledSites] = useState<string[]>([]);
+  const [autoReplyEnabled, setAutoReplyEnabled] = useState<boolean>(false);
 
   useEffect(() => {
     // Restore settings from chrome.storage
@@ -16,11 +17,13 @@ const Options = () => {
         apiKey: "",
         targetLanguage: "English",
         disabledSites: [],
+        autoReplyEnabled: false,
       },
       (items) => {
         setApiKey(items.apiKey);
         setTargetLanguage(items.targetLanguage);
         setDisabledSites(items.disabledSites);
+        setAutoReplyEnabled(items.autoReplyEnabled);
       }
     );
   }, []);
@@ -44,6 +47,11 @@ const Options = () => {
         setTimeout(() => setSettingsStatus(""), 3000);
       }
     );
+  };
+
+  const handleAutoReplyChange = (enabled: boolean) => {
+    setAutoReplyEnabled(enabled);
+    chrome.storage.sync.set({ autoReplyEnabled: enabled });
   };
 
   const removeSite = (siteToRemove: string) => {
@@ -218,12 +226,48 @@ const Options = () => {
     listStyle: "none",
   };
 
+  const toggleSwitchStyle: React.CSSProperties = {
+    position: "relative",
+    display: "inline-block",
+    width: "44px",
+    height: "24px",
+  };
+
+  const toggleSwitchInputStyle: React.CSSProperties = {
+    opacity: 0,
+    width: 0,
+    height: 0,
+  };
+
+  const sliderStyle: React.CSSProperties = {
+    position: "absolute",
+    cursor: "pointer",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "#ccc",
+    transition: ".4s",
+    borderRadius: "24px",
+  };
+
+  const sliderBeforeStyle: React.CSSProperties = {
+    position: "absolute",
+    content: '""',
+    height: "16px",
+    width: "16px",
+    left: "4px",
+    bottom: "4px",
+    backgroundColor: "white",
+    transition: ".4s",
+    borderRadius: "50%",
+  };
+
   return (
     <div style={pageStyle}>
       <div style={containerStyle}>
         <header style={headerStyle}>
           <h1 style={titleStyle}>AINPUT</h1>
-          <p style={subtitleStyle}>Extension Settings</p>
         </header>
 
         <div style={cardStyle}>
@@ -279,6 +323,42 @@ const Options = () => {
               <option value="Thai">Thai</option>
               <option value="Indonesian">Indonesian</option>
             </select>
+          </div>
+
+          <div style={formGroupStyle}>
+            <label style={labelStyle}>Auto Reply:</label>
+            <div style={{ display: "flex", alignItems: "center" }}>
+              <label style={toggleSwitchStyle}>
+                <input
+                  type="checkbox"
+                  checked={autoReplyEnabled}
+                  onChange={(e) => handleAutoReplyChange(e.target.checked)}
+                  style={toggleSwitchInputStyle}
+                />
+                <span
+                  style={{
+                    ...sliderStyle,
+                    backgroundColor: autoReplyEnabled ? "#00B1F2" : "#ccc",
+                  }}
+                >
+                  <span
+                    style={{
+                      ...sliderBeforeStyle,
+                      transform: autoReplyEnabled
+                        ? "translateX(20px)"
+                        : "translateX(0)",
+                    }}
+                  />
+                </span>
+              </label>
+              <span style={{ marginLeft: "12px", color: "#555" }}>
+                {autoReplyEnabled ? "Enabled" : "Disabled"}
+              </span>
+            </div>
+            <p style={hintStyle}>
+              Automatically suggest a reply when you focus on an empty input
+              field.
+            </p>
           </div>
 
           <button onClick={saveOptions} style={buttonStyle}>

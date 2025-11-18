@@ -18,6 +18,7 @@
     "url": "https://github.com/stonega/ainput.git"
   },
   "dependencies": {
+    "@mozilla/readability": "^0.6.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-icons": "^5.5.0"
@@ -27,6 +28,7 @@
     "@testing-library/react": "^16.3.0",
     "@types/chrome": "0.0.158",
     "@types/jest": "^29.5.0",
+    "@types/mozilla__readability": "^0.4.2",
     "@types/react": "^18.0.29",
     "@types/react-dom": "^18.0.11",
     "bestzip": "^2.2.1",

@@ -79,6 +79,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch((error) => sendResponse({ success: false, error: error.message }));
     return true; // Keep the message channel open for async response
   }
+
+  if (message.action === "autoReply") {
+    handleAutoReply(message.pageContent)
+      .then((result) => sendResponse({ success: true, result }))
+      .catch((error) => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
 });
 
 async function handleFixGrammar(text: string): Promise<string> {
@@ -118,6 +125,18 @@ async function handleEnhancePrompt(text: string): Promise<string> {
   }
 
   const prompt = `Enhance the following prompt to be more detailed and effective for large language models. Return ONLY the enhanced prompt without any explanations or additional comments:\n\n${text}`;
+
+  return await callGeminiAPI(prompt, settings.apiKey);
+}
+
+async function handleAutoReply(pageContent: string): Promise<string> {
+  const settings = await chrome.storage.sync.get(["apiKey"]);
+
+  if (!settings.apiKey) {
+    throw new Error("Please set your Gemini API key in the extension options.");
+  }
+
+  const prompt = `Based on the following page content, generate a concise and relevant reply. The reply should be suitable for a comment or a short message. Return only the suggested reply, without any introductory phrases like "Here's a reply:" or any other explanations.\n\nPage Content:\n"""\n${pageContent}\n"""\n\nSuggested Reply:`;
 
   return await callGeminiAPI(prompt, settings.apiKey);
 }
