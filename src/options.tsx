@@ -1,9 +1,28 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { FaGithub } from "react-icons/fa";
+import { FaGithub, FaTrash } from "react-icons/fa";
+
+interface Model {
+  id: string;
+  name: string;
+  apiKey: string;
+  type: "gemini" | "openai" | "anthropic" | "openrouter" | "custom";
+  baseUrl?: string;
+  model?: string;
+}
 
 const Options = () => {
-  const [apiKey, setApiKey] = useState<string>("");
+  const [models, setModels] = useState<Model[]>([]);
+  const [activeModelId, setActiveModelId] = useState<string | null>(null);
+
+  const [newModelType, setNewModelType] = useState<
+    "gemini" | "openai" | "anthropic" | "openrouter" | "custom"
+  >("gemini");
+  const [newModelName, setNewModelName] = useState<string>("");
+  const [newModelApiKey, setNewModelApiKey] = useState<string>("");
+  const [newModelBaseUrl, setNewModelBaseUrl] = useState<string>("");
+  const [newModelString, setNewModelString] = useState<string>("");
+
   const [targetLanguage, setTargetLanguage] = useState<string>("English");
   const [settingsStatus, setSettingsStatus] = useState<string>("");
   const [disabledListStatus, setDisabledListStatus] = useState<string>("");
@@ -11,16 +30,35 @@ const Options = () => {
   const [autoReplyEnabled, setAutoReplyEnabled] = useState<boolean>(false);
 
   useEffect(() => {
-    // Restore settings from chrome.storage
     chrome.storage.sync.get(
       {
-        apiKey: "",
+        apiKey: "", // For migration
+        models: [],
+        activeModelId: null,
         targetLanguage: "English",
         disabledSites: [],
         autoReplyEnabled: false,
       },
       (items) => {
-        setApiKey(items.apiKey);
+        if (items.models && items.models.length > 0) {
+          setModels(items.models);
+          setActiveModelId(items.activeModelId);
+        } else if (items.apiKey) {
+          // Migration from old version
+          const defaultGeminiModel: Model = {
+            id: "gemini-default",
+            name: "Gemini (Default)",
+            apiKey: items.apiKey,
+            type: "gemini",
+          };
+          setModels([defaultGeminiModel]);
+          setActiveModelId(defaultGeminiModel.id);
+          chrome.storage.sync.set({
+            models: [defaultGeminiModel],
+            activeModelId: defaultGeminiModel.id,
+            apiKey: "", // Clear old key
+          });
+        }
         setTargetLanguage(items.targetLanguage);
         setDisabledSites(items.disabledSites);
         setAutoReplyEnabled(items.autoReplyEnabled);
@@ -28,18 +66,9 @@ const Options = () => {
     );
   }, []);
 
-  const saveOptions = () => {
-    // Validate API key
-    if (!apiKey.trim()) {
-      setSettingsStatus("Please enter a valid API key.");
-      setTimeout(() => setSettingsStatus(""), 3000);
-      return;
-    }
-
-    // Save options to chrome.storage.sync
+  const saveGeneralSettings = () => {
     chrome.storage.sync.set(
       {
-        apiKey: apiKey.trim(),
         targetLanguage: targetLanguage,
       },
       () => {
@@ -47,6 +76,85 @@ const Options = () => {
         setTimeout(() => setSettingsStatus(""), 3000);
       }
     );
+  };
+
+  const addModel = () => {
+    if (!newModelName.trim() || !newModelApiKey.trim()) {
+      setSettingsStatus("Model Name and API Key are required.");
+      setTimeout(() => setSettingsStatus(""), 3000);
+      return;
+    }
+
+    if (newModelType === "openai") {
+      if (!newModelBaseUrl.trim() || !newModelString.trim()) {
+        setSettingsStatus(
+          "Base URL and Model String are required for OpenAI models."
+        );
+        setTimeout(() => setSettingsStatus(""), 3000);
+        return;
+      }
+    }
+
+    const newModel: Model = {
+      id: `model-${Date.now()}`,
+      name: newModelName.trim(),
+      apiKey: newModelApiKey.trim(),
+      type: newModelType,
+      baseUrl:
+        newModelType === "openai"
+          ? "https://api.openai.com"
+          : newModelType === "anthropic"
+          ? "https://api.anthropic.com"
+          : newModelType === "openrouter"
+          ? "https://openrouter.ai/api"
+          : newModelBaseUrl.trim(),
+      model: newModelString.trim(),
+    };
+
+    const updatedModels = [...models, newModel];
+    setModels(updatedModels);
+
+    // If it's the first model, set it as active
+    if (models.length === 0) {
+      setActiveModelId(newModel.id);
+      chrome.storage.sync.set({
+        models: updatedModels,
+        activeModelId: newModel.id,
+      });
+    } else {
+      chrome.storage.sync.set({ models: updatedModels });
+    }
+
+    // Reset form
+    setNewModelName("");
+    setNewModelApiKey("");
+    setNewModelBaseUrl("");
+    setNewModelString("");
+    setSettingsStatus("Model added successfully!");
+    setTimeout(() => setSettingsStatus(""), 3000);
+  };
+
+  const deleteModel = (id: string) => {
+    const updatedModels = models.filter((model) => model.id !== id);
+    setModels(updatedModels);
+
+    let newActiveModelId = activeModelId;
+    if (activeModelId === id) {
+      newActiveModelId = updatedModels.length > 0 ? updatedModels[0].id : null;
+      setActiveModelId(newActiveModelId);
+    }
+
+    chrome.storage.sync.set({
+      models: updatedModels,
+      activeModelId: newActiveModelId,
+    });
+    setSettingsStatus("Model deleted successfully!");
+    setTimeout(() => setSettingsStatus(""), 3000);
+  };
+
+  const handleSetActiveModel = (id: string) => {
+    setActiveModelId(id);
+    chrome.storage.sync.set({ activeModelId: id });
   };
 
   const handleAutoReplyChange = (enabled: boolean) => {
@@ -219,6 +327,14 @@ const Options = () => {
     marginRight: "8px",
   };
 
+  const deleteButtonStyle: React.CSSProperties = {
+    background: "none",
+    border: "none",
+    color: "#dc3545",
+    cursor: "pointer",
+    fontSize: "16px",
+  };
+
   const shortcutListStyle: React.CSSProperties = {
     lineHeight: "1.8",
     color: "#555",
@@ -271,29 +387,129 @@ const Options = () => {
         </header>
 
         <div style={cardStyle}>
-          <h3 style={howToUseTitleStyle}>Settings</h3>
-          <div style={formGroupStyle}>
-            <label style={labelStyle}>Gemini API Key:</label>
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(event) => setApiKey(event.target.value)}
-              placeholder="Enter your Gemini API key"
-              style={inputStyle}
-            />
-            <p style={hintStyle}>
-              Get your API key from{" "}
-              <a
-                href="https://aistudio.google.com/app/apikey"
-                target="_blank"
-                rel="noopener noreferrer"
-                style={linkStyle}
+          <h3 style={howToUseTitleStyle}>AI Models</h3>
+          {models.map((model) => (
+            <div
+              key={model.id}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "10px 0",
+                borderBottom: "1px solid #eee",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center" }}>
+                <input
+                  type="radio"
+                  id={`model-${model.id}`}
+                  name="activeModel"
+                  checked={activeModelId === model.id}
+                  onChange={() => handleSetActiveModel(model.id)}
+                  style={{ marginRight: "10px" }}
+                />
+                <label htmlFor={`model-${model.id}`}>{model.name}</label>
+              </div>
+              <button
+                onClick={() => deleteModel(model.id)}
+                style={deleteButtonStyle}
+                title="Delete Model"
               >
-                Google AI Studio
-              </a>
-            </p>
-          </div>
+                <FaTrash />
+              </button>
+            </div>
+          ))}
 
+          <div style={{ marginTop: "20px", paddingTop: "20px", borderTop: "1px solid #eee" }}>
+            <h4 style={{ marginTop: 0, marginBottom: "15px", color: "#333" }}>
+              Add New Model
+            </h4>
+            <div style={formGroupStyle}>
+              <label style={labelStyle}>Model Type:</label>
+              <select
+                value={newModelType}
+                onChange={(e) =>
+                  setNewModelType(
+                    e.target.value as
+                      | "gemini"
+                      | "openai"
+                      | "anthropic"
+                      | "openrouter"
+                      | "custom"
+                  )
+                }
+                style={inputStyle}
+              >
+                <option value="gemini">Gemini</option>
+                <option value="openai">OpenAI</option>
+                <option value="anthropic">Anthropic</option>
+                <option value="openrouter">OpenRouter</option>
+                <option value="custom">Custom (OpenAI Comp)</option>
+              </select>
+            </div>
+            <div style={formGroupStyle}>
+              <label style={labelStyle}>Model Name:</label>
+              <input
+                type="text"
+                value={newModelName}
+                onChange={(e) => setNewModelName(e.target.value)}
+                placeholder="e.g., My Personal GPT"
+                style={inputStyle}
+              />
+            </div>
+            <div style={formGroupStyle}>
+              <label style={labelStyle}>API Key:</label>
+              <input
+                type="password"
+                value={newModelApiKey}
+                onChange={(e) => setNewModelApiKey(e.target.value)}
+                placeholder="Enter your API key"
+                style={inputStyle}
+              />
+            </div>
+            {newModelType === "custom" && (
+              <div style={formGroupStyle}>
+                <label style={labelStyle}>Base URL:</label>
+                <input
+                  type="text"
+                  value={newModelBaseUrl}
+                  onChange={(e) => setNewModelBaseUrl(e.target.value)}
+                  placeholder="https://api.custom.dev"
+                  style={inputStyle}
+                />
+              </div>
+            )}
+            {(newModelType === "openai" ||
+              newModelType === "anthropic" ||
+              newModelType === "openrouter" ||
+              newModelType === "custom") && (
+              <div style={formGroupStyle}>
+                <label style={labelStyle}>Model String:</label>
+                <input
+                  type="text"
+                  value={newModelString}
+                  onChange={(e) => setNewModelString(e.target.value)}
+                  placeholder={
+                    newModelType === "openai"
+                      ? "gpt-4"
+                      : newModelType === "anthropic"
+                      ? "claude-3-opus-20240229"
+                      : newModelType === "openrouter"
+                      ? "google/gemini-pro-2.5"
+                      : "custom-model"
+                  }
+                  style={inputStyle}
+                />
+              </div>
+            )}
+            <button onClick={addModel} style={buttonStyle}>
+              Add Model
+            </button>
+          </div>
+        </div>
+
+        <div style={cardStyle}>
+          <h3 style={howToUseTitleStyle}>General Settings</h3>
           <div style={formGroupStyle}>
             <label style={labelStyle}>Target Language for Translation:</label>
             <select
@@ -361,7 +577,7 @@ const Options = () => {
             </p>
           </div>
 
-          <button onClick={saveOptions} style={buttonStyle}>
+          <button onClick={saveGeneralSettings} style={buttonStyle}>
             Save Settings
           </button>
 
