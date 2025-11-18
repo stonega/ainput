@@ -77,6 +77,7 @@ const Options = () => {
             name: "Gemini (Default)",
             apiKey: items.apiKey,
             type: "gemini",
+            model: "gemini-2.5-flash",
           };
           setModels([defaultGeminiModel]);
           setActiveModelId(defaultGeminiModel.id);
@@ -123,8 +124,13 @@ const Options = () => {
       return;
     }
 
+    let modelString = newModelString.trim();
+    if (newModelType === "gemini" && !modelString) {
+      modelString = "gemini-2.5-flash";
+    }
+
     if (newModelType === "openai") {
-      if (!newModelBaseUrl.trim() || !newModelString.trim()) {
+      if (!newModelBaseUrl.trim() || !modelString) {
         showStatus("Base URL and Model String are required for OpenAI models.", 'error');
         return;
       }
@@ -141,7 +147,7 @@ const Options = () => {
           : newModelType === "openrouter"
           ? "https://openrouter.ai/api"
           : newModelBaseUrl.trim(),
-      model: newModelString.trim(),
+      model: modelString,
     };
 
     const updatedModels = [...models, newModel];
@@ -196,6 +202,9 @@ const Options = () => {
 
   // --- Components ---
 
+  const tabs = ["models", "settings", "usage"] as const;
+  const activeIndex = tabs.indexOf(activeTab);
+
   const TabButton = ({ id, label, icon: Icon }: { id: typeof activeTab; label: string; icon: any }) => (
     <button
       onClick={() => setActiveTab(id)}
@@ -207,14 +216,16 @@ const Options = () => {
         justifyContent: "center",
         padding: "12px",
         border: "none",
-        background: activeTab === id ? theme.colors.surface : "transparent",
+        background: "transparent",
         color: activeTab === id ? theme.colors.primary : theme.colors.textSecondary,
         fontWeight: activeTab === id ? 600 : 500,
         cursor: "pointer",
         borderRadius: theme.borderRadius.md,
-        boxShadow: activeTab === id ? theme.shadows.sm : "none",
+        boxShadow: "none",
         gap: "8px",
         fontSize: "14px",
+        position: "relative",
+        zIndex: 1,
       }}
     >
       <Icon size={16} />
@@ -304,8 +315,24 @@ const Options = () => {
           padding: "4px", 
           backgroundColor: "#e2e8f0", 
           borderRadius: theme.borderRadius.lg, 
-          marginBottom: "32px" 
+          marginBottom: "32px",
+          position: "relative",
         }}>
+          <div
+            className="transition-all"
+            style={{
+              position: "absolute",
+              top: "4px",
+              bottom: "4px",
+              left: "4px",
+              width: "calc((100% - 8px) / 3)",
+              transform: `translateX(${activeIndex * 100}%)`,
+              backgroundColor: theme.colors.surface,
+              borderRadius: theme.borderRadius.md,
+              boxShadow: theme.shadows.sm,
+              zIndex: 0,
+            }}
+          />
           <TabButton id="models" label="AI Models" icon={FaRobot} />
           <TabButton id="settings" label="Settings" icon={FaCog} />
           <TabButton id="usage" label="Token Usage" icon={FaChartBar} />
@@ -484,7 +511,7 @@ const Options = () => {
                     </div>
                   )}
 
-                  {(newModelType === "openai" || newModelType === "openrouter" || newModelType === "custom") && (
+                  {(newModelType === "openai" || newModelType === "openrouter" || newModelType === "custom" || newModelType === "gemini") && (
                     <div style={{ gridColumn: "1 / -1" }}>
                       <label style={{ display: "block", marginBottom: "8px", fontWeight: 500, fontSize: "14px" }}>Model ID</label>
                       <Input
@@ -493,7 +520,8 @@ const Options = () => {
                         onChange={(e) => setNewModelString(e.target.value)}
                         placeholder={
                           newModelType === "openai" ? "gpt-4-turbo" : 
-                          newModelType === "openrouter" ? "anthropic/claude-3-opus" : "llama-2-70b"
+                          newModelType === "openrouter" ? "anthropic/claude-3-opus" : 
+                          newModelType === "gemini" ? "gemini-2.5-flash" : "llama-2-70b"
                         }
                       />
                     </div>

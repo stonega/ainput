@@ -76,6 +76,7 @@ const ButtonContainer: React.FC<ButtonContainerProps> = ({
         flexDirection: "column",
         gap: "6px",
         padding: "4px",
+        animation: "ainput-fade-in 0.2s ease-out forwards",
       }}
     >
       <button
@@ -697,6 +698,16 @@ style.textContent = `
     100% {
       transform: scale(0.95);
       box-shadow: 0 0 0 0 rgba(33, 150, 243, 0);
+    }
+  }
+  @keyframes ainput-fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
     }
   }
   .ainput-thinking-gradient {

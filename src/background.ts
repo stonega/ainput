@@ -39,9 +39,11 @@ interface OpenAIResponse {
 async function callGeminiAPI(
   prompt: string,
   apiKey: string,
+  model: string,
   kind: string
 ): Promise<string> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  const modelId = model || "gemini-2.5-flash";
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`;
 
   const response = await fetch(url, {
     method: "POST",
@@ -70,7 +72,7 @@ async function callGeminiAPI(
   if (data.usageMetadata) {
     addTokenUsage({
       date: new Date().toISOString(),
-      model: "gemini-2.5-flash",
+      model: modelId,
       kind,
       tokens: data.usageMetadata.totalTokenCount,
     });
@@ -166,7 +168,7 @@ async function callApi(prompt: string, kind: string): Promise<string> {
     }
 
     if (activeModel.type === "gemini") {
-      return callGeminiAPI(prompt, activeModel.apiKey, kind);
+      return callGeminiAPI(prompt, activeModel.apiKey, activeModel.model || "gemini-2.5-flash", kind);
     } else if (
       activeModel.type === "openai" ||
       activeModel.type === "openrouter" ||
@@ -187,7 +189,7 @@ async function callApi(prompt: string, kind: string): Promise<string> {
     throw new Error("Please select an active model in the extension options.");
   } else if (settings.apiKey) {
     // Legacy support for old settings
-    return callGeminiAPI(prompt, settings.apiKey, "legacy");
+    return callGeminiAPI(prompt, settings.apiKey, "gemini-2.5-flash", "legacy");
   } else {
     throw new Error(
       "No API key or model configured. Please set your API key in the extension options."
