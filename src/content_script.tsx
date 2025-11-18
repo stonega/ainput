@@ -552,23 +552,28 @@ function hideAccessory() {
 }
 
 let isExtensionEnabled = true;
+let isAutoReplyEnabledForSite = false;
 
 function checkIsEnabled() {
   const currentOrigin = window.location.origin;
-  chrome.storage.sync.get("disabledSites", (data) => {
+  chrome.storage.sync.get(["disabledSites", "autoReplySites"], (data) => {
     const disabledSites = data.disabledSites || [];
     isExtensionEnabled = !disabledSites.includes(currentOrigin);
     if (!isExtensionEnabled) {
       hideAccessory();
     }
+    const autoReplySites = data.autoReplySites || [];
+    isAutoReplyEnabledForSite = autoReplySites.includes(currentOrigin);
   });
 }
 
 checkIsEnabled();
 
 chrome.storage.onChanged.addListener((changes, namespace) => {
-  if (namespace === "sync" && changes.disabledSites) {
-    checkIsEnabled();
+  if (namespace === "sync") {
+    if (changes.disabledSites || changes.autoReplySites) {
+      checkIsEnabled();
+    }
   }
 });
 
@@ -579,72 +584,70 @@ document.addEventListener(
 
     const target = event.target as HTMLElement;
 
-    chrome.storage.sync.get({ autoReplyEnabled: false }, (items) => {
-      if (items.autoReplyEnabled) {
-        const isEditable =
-          target.tagName.toLowerCase() === "textarea" ||
-          (target instanceof HTMLInputElement &&
-            [
-              "text",
-              "email",
-              "search",
-              "tel",
-              "url",
-            ].includes(target.type)) ||
-          (target.isContentEditable &&
-            target.tagName.toLowerCase().includes("div"));
+    if (isAutoReplyEnabledForSite) {
+      const isEditable =
+        target.tagName.toLowerCase() === "textarea" ||
+        (target instanceof HTMLInputElement &&
+          [
+            "text",
+            "email",
+            "search",
+            "tel",
+            "url",
+          ].includes(target.type)) ||
+        (target.isContentEditable &&
+          target.tagName.toLowerCase().includes("div"));
 
-        if (isEditable) {
-          const text =
-            "value" in target ? (target as HTMLInputElement).value : target.textContent || "";
-          if (!text.trim()) {
-            const documentClone = document.cloneNode(true) as Document;
-            const article = new Readability(documentClone).parse();
-            const pageContent = article?.textContent?.slice(0, 4000) || "";
-            target.dispatchEvent(new Event("ainput-loading-start"));
-            chrome.runtime.sendMessage(
-              {
-                action: "autoReply",
-                pageContent,
-              },
-              (response: MessageResponse) => {
-                if (chrome.runtime.lastError) {
-                  console.error(
-                    "AInput Auto Reply Error:",
-                    chrome.runtime.lastError.message
-                  );
-                  target.dispatchEvent(new Event("ainput-loading-end"));
-                  return;
-                }
-
-                if (response && response.success && response.result) {
-                  if ("value" in target) {
-                    (target as HTMLInputElement).value = "";
-                  } else {
-                    target.textContent = "";
-                  }
-                  target.dispatchEvent(new Event("input", { bubbles: true }));
-                  // Not using the animated text for now for auto-reply
-                  if ("value" in target) {
-                    (target as HTMLInputElement).value = response.result;
-                  } else {
-                    target.textContent = response.result;
-                  }
-                  target.dispatchEvent(new Event("input", { bubbles: true }));
-                } else {
-                  // Don't alert on auto-reply failure, just log it.
-                  console.error(
-                    "AInput Auto Reply Error:",
-                    response?.error || "Failed to get auto-reply"
-                  );
-                }
+      if (isEditable) {
+        const text =
+          "value" in target ? (target as HTMLInputElement).value : target.textContent || "";
+        if (!text.trim()) {
+          const documentClone = document.cloneNode(true) as Document;
+          const article = new Readability(documentClone).parse();
+          const pageContent = article?.textContent?.slice(0, 4000) || "";
+          target.dispatchEvent(new Event("ainput-loading-start"));
+          chrome.runtime.sendMessage(
+            {
+              action: "autoReply",
+              pageContent,
+            },
+            (response: MessageResponse) => {
+              if (chrome.runtime.lastError) {
+                console.error(
+                  "AInput Auto Reply Error:",
+                  chrome.runtime.lastError.message
+                );
                 target.dispatchEvent(new Event("ainput-loading-end"));
+                return;
               }
-            );
-          }
+
+              if (response && response.success && response.result) {
+                if ("value" in target) {
+                  (target as HTMLInputElement).value = "";
+                } else {
+                  target.textContent = "";
+                }
+                target.dispatchEvent(new Event("input", { bubbles: true }));
+                // Not using the animated text for now for auto-reply
+                if ("value" in target) {
+                  (target as HTMLInputElement).value = response.result;
+                } else {
+                  target.textContent = response.result;
+                }
+                target.dispatchEvent(new Event("input", { bubbles: true }));
+              } else {
+                // Don't alert on auto-reply failure, just log it.
+                console.error(
+                  "AInput Auto Reply Error:",
+                  response?.error || "Failed to get auto-reply"
+                );
+              }
+              target.dispatchEvent(new Event("ainput-loading-end"));
+            }
+          );
         }
       }
-    });
+    }
 
     if (target.tagName.toLowerCase() === "textarea") {
       showAccessoryFor(target as HTMLTextAreaElement);

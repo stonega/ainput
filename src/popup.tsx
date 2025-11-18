@@ -6,6 +6,9 @@ export const Popup = () => {
   const [currentOrigin, setCurrentOrigin] = useState<string>();
   const [activeTabId, setActiveTabId] = useState<number>();
   const [isDisabled, setIsDisabled] = useState<boolean | null>(null);
+  const [isAutoReplyEnabled, setIsAutoReplyEnabled] = useState<boolean | null>(
+    null
+  );
 
   useEffect(() => {
     chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
@@ -15,6 +18,7 @@ export const Popup = () => {
         setCurrentOrigin(undefined);
         setActiveTabId(undefined);
         setIsDisabled(null);
+        setIsAutoReplyEnabled(null);
         return;
       }
 
@@ -25,14 +29,18 @@ export const Popup = () => {
         const origin = url.origin;
         setCurrentOrigin(origin);
 
-        chrome.storage.sync.get(["disabledSites"], (items) => {
+        chrome.storage.sync.get(["disabledSites", "autoReplySites"], (items) => {
           const disabledSites: string[] = items.disabledSites || [];
           setIsDisabled(disabledSites.includes(origin));
+
+          const autoReplySites: string[] = items.autoReplySites || [];
+          setIsAutoReplyEnabled(autoReplySites.includes(origin));
         });
       } catch (error) {
         console.error("Unable to parse tab URL:", error);
         setCurrentOrigin(undefined);
         setIsDisabled(null);
+        setIsAutoReplyEnabled(null);
       }
     });
   }, []);
@@ -84,6 +92,39 @@ export const Popup = () => {
     });
   };
 
+  const handleToggleAutoReply = () => {
+    if (!currentOrigin || activeTabId === undefined || isAutoReplyEnabled === null) {
+      return;
+    }
+
+    const nextAutoReplyEnabled = !isAutoReplyEnabled;
+
+    chrome.storage.sync.get(["autoReplySites"], (items) => {
+      const autoReplySites = new Set<string>(items.autoReplySites || []);
+
+      if (nextAutoReplyEnabled) {
+        autoReplySites.add(currentOrigin);
+      } else {
+        autoReplySites.delete(currentOrigin);
+      }
+
+      chrome.storage.sync.set(
+        { autoReplySites: Array.from(autoReplySites) },
+        () => {
+          if (chrome.runtime.lastError) {
+            console.error(
+              "Failed to update auto reply sites:",
+              chrome.runtime.lastError
+            );
+            return;
+          }
+
+          setIsAutoReplyEnabled(nextAutoReplyEnabled);
+        }
+      );
+    });
+  };
+
   const openOptionsPage = () => {
     chrome.runtime.openOptionsPage();
   };
@@ -119,6 +160,7 @@ export const Popup = () => {
     alignItems: "center",
     cursor: isLoading ? "not-allowed" : "pointer",
     opacity: isLoading ? 0.6 : 1,
+    marginBottom: "10px",
   };
 
   const toggleSwitchStyle: React.CSSProperties = {
@@ -189,9 +231,38 @@ export const Popup = () => {
         <span style={toggleSwitchStyle}>
           <span style={toggleKnobStyle}></span>
         </span>
-        {/* <span style={statusTextStyle}>
-          {isLoading ? "Loading..." : isDisabled ? "Disabled" : "Enabled"}
-        </span> */}
+        <span style={statusTextStyle}>
+          {isLoading
+            ? "Loading..."
+            : isDisabled
+            ? "Extension Disabled"
+            : "Extension Enabled"}
+        </span>
+      </label>
+      <label style={{...labelStyle, opacity: isDisabled ? 0.5 : 1}}>
+        <input
+          type="checkbox"
+          checked={isAutoReplyEnabled || false}
+          onChange={handleToggleAutoReply}
+          disabled={isLoading || isDisabled}
+          style={{ display: "none" }}
+        />
+        <span style={{
+          ...toggleSwitchStyle,
+          backgroundColor: isAutoReplyEnabled ? "#2196F3" : "#bdc3c7"
+        }}>
+          <span style={{
+            ...toggleKnobStyle,
+            left: isAutoReplyEnabled ? "22px" : "2px"
+          }}></span>
+        </span>
+        <span style={statusTextStyle}>
+          {isLoading
+            ? "Loading..."
+            : isAutoReplyEnabled
+            ? "Auto Reply Enabled"
+            : "Auto Reply Disabled"}
+        </span>
       </label>
     </div>
   );

@@ -39,7 +39,6 @@ const Options = () => {
   const [settingsStatus, setSettingsStatus] = useState<string>("");
   const [disabledListStatus, setDisabledListStatus] = useState<string>("");
   const [disabledSites, setDisabledSites] = useState<string[]>([]);
-  const [autoReplyEnabled, setAutoReplyEnabled] = useState<boolean>(false);
 
   const [usageData, setUsageData] = useState<TokenUsage[]>([]);
   const [usagePage, setUsagePage] = useState<number>(1);
@@ -54,7 +53,6 @@ const Options = () => {
         activeModelId: null,
         targetLanguage: "English",
         disabledSites: [],
-        autoReplyEnabled: false,
       },
       (items) => {
         if (items.models && items.models.length > 0) {
@@ -78,7 +76,6 @@ const Options = () => {
         }
         setTargetLanguage(items.targetLanguage);
         setDisabledSites(items.disabledSites);
-        setAutoReplyEnabled(items.autoReplyEnabled);
       }
     );
 
@@ -180,11 +177,6 @@ const Options = () => {
   const handleSetActiveModel = (id: string) => {
     setActiveModelId(id);
     chrome.storage.sync.set({ activeModelId: id });
-  };
-
-  const handleAutoReplyChange = (enabled: boolean) => {
-    setAutoReplyEnabled(enabled);
-    chrome.storage.sync.set({ autoReplyEnabled: enabled });
   };
 
   const removeSite = (siteToRemove: string) => {
@@ -320,13 +312,6 @@ const Options = () => {
     padding: '5px',
     transition: 'background-color 0.2s',
   }
-
-  const removeButtonStyle: React.CSSProperties = {
-    ...buttonStyle,
-    backgroundColor: "#dc3545",
-    padding: "5px 10px",
-    fontSize: "12px",
-  };
 
   const statusMessageStyle: React.CSSProperties = {
     marginTop: "15px",
@@ -620,42 +605,6 @@ const Options = () => {
                 </select>
               </div>
 
-              <div style={formGroupStyle}>
-                <label style={labelStyle}>Auto Reply:</label>
-                <div style={{ display: "flex", alignItems: "center" }}>
-                  <label style={toggleSwitchStyle}>
-                    <input
-                      type="checkbox"
-                      checked={autoReplyEnabled}
-                      onChange={(e) => handleAutoReplyChange(e.target.checked)}
-                      style={toggleSwitchInputStyle}
-                    />
-                    <span
-                      style={{
-                        ...sliderStyle,
-                        backgroundColor: autoReplyEnabled ? "#00B1F2" : "#ccc",
-                      }}
-                    >
-                      <span
-                        style={{
-                          ...sliderBeforeStyle,
-                          transform: autoReplyEnabled
-                            ? "translateX(20px)"
-                            : "translateX(0)",
-                        }}
-                      />
-                    </span>
-                  </label>
-                  <span style={{ marginLeft: "12px", color: "#555" }}>
-                    {autoReplyEnabled ? "Enabled" : "Disabled"}
-                  </span>
-                </div>
-                <p style={hintStyle}>
-                  Automatically suggest a reply when you focus on an empty input
-                  field.
-                </p>
-              </div>
-
               <button onClick={saveGeneralSettings} style={buttonStyle}>
                 Save Settings
               </button>
@@ -682,9 +631,9 @@ const Options = () => {
                       <span>{site}</span>
                       <button
                         onClick={() => removeSite(site)}
-                        style={removeButtonStyle}
+                        style={deleteButtonStyle}
                       >
-                        Remove
+                        <FaTrash />
                       </button>
                     </li>
                   ))}
