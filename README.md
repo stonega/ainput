@@ -2,14 +2,22 @@
 
 [![Chrome Web Store](https://img.shields.io/chrome-web-store/v/paleeakmljeofbpnnbnkllpbigccecnh.svg)](https://chromewebstore.google.com/detail/ainput/paleeakmljeofbpnnbnkllpbigccecnh)
 
-AInput, a powerful Chrome extension that enhances text input on any web page using Google's Gemini 2.5 Flash AI model. Features include grammar fixing and translation to multiple languages.
+AInput is a powerful Chrome extension that enhances text input on any web page using Google's Gemini 2.5 Flash AI model or custom models. Features include grammar fixing and translation to multiple languages.
 
 
 ## Features
 
 ✨ **Fix Grammar** - Automatically fix grammar and spelling errors in your text
 🌐 **Translate** - Translate text to your preferred language
+🤖 **Auto Reply** - Generate a relevant reply based on the page content
 ⚡ **Real-time Processing** - Instant AI-powered text enhancement
+
+### Custom Models
+
+In addition to the default Google Gemini 2.0 Flash model, you can also use other models like OpenAI's GPT-4 or a custom model from OpenRouter. This allows you to use the model you prefer and leverage its unique capabilities.
+
+To use a custom model, go to the extension's options page, click on the "Models" tab, and then click "Add New Model". You can then select the model type and enter the necessary information, such as the API key, base URL, and model string.
+
 🎯 **Universal** - Works on any text input or textarea on the web
 🔒 **Privacy-focused** - Uses your own Gemini API key
 
@@ -63,6 +71,13 @@ npm run build
 3. Type or paste your text
 4. Click the desired button
 5. The AI will process your text and replace it with the enhanced version
+
+### Auto Reply Usage
+
+1. Open the extension popup by clicking on the extension icon in the Chrome toolbar.
+2. Go to the "Auto Reply" tab.
+3. Click "Enable Auto Reply for this site".
+4. Now, whenever you focus on a text input on that site, an auto-reply will be generated based on the page's content.
 
 ## Supported Languages for Translation
 
@@ -125,7 +140,7 @@ npm run style
 ## How It Works
 
 1. **Content Script** - Injects "Fix Grammar" and "Translate" buttons next to all text inputs
-2. **Background Worker** - Handles API calls to Google Gemini 2.0 Flash
+2. **Background Worker** - Handles API calls to Google Gemini 2.0 Flash, OpenAI, or a custom model
 3. **Chrome Storage** - Securely stores your API key and preferences
 4. **React Components** - Modern UI with TypeScript for type safety
 
