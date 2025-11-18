@@ -24,15 +24,6 @@ interface OpenAIResponse {
   };
 }
 
-interface AnthropicResponse {
-  content?: Array<{
-    text: string;
-  }>;
-  error?: {
-    message: string;
-  };
-}
-
 async function callGeminiAPI(prompt: string, apiKey: string): Promise<string> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
@@ -124,45 +115,6 @@ async function callOpenAIAPI(
   return data.choices[0].message.content;
 }
 
-async function callAnthropicAPI(
-  prompt: string,
-  apiKey: string,
-  baseUrl: string,
-  model: string
-): Promise<string> {
-  const url = `${baseUrl}/v1/messages`;
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: model,
-      messages: [{ role: "user", content: prompt }],
-      max_tokens: 2048,
-    }),
-  });
-
-  const data: AnthropicResponse = await response.json();
-
-  if (data.error) {
-    throw new Error(data.error.message);
-  }
-
-  if (!response.ok) {
-    throw new Error(`API request failed: ${response.statusText}`);
-  }
-
-  if (!data.content || data.content.length === 0) {
-    throw new Error("No response from API");
-  }
-
-  return data.content[0].text;
-}
-
 async function callApi(prompt: string): Promise<string> {
   const settings = await chrome.storage.sync.get([
     "models",
@@ -191,13 +143,6 @@ async function callApi(prompt: string): Promise<string> {
         activeModel.baseUrl,
         activeModel.model,
         activeModel.type === "custom"
-      );
-    } else if (activeModel.type === "anthropic") {
-      return callAnthropicAPI(
-        prompt,
-        activeModel.apiKey,
-        activeModel.baseUrl,
-        activeModel.model
       );
     } else {
       throw new Error(`Unsupported model type: ${activeModel.type}`);

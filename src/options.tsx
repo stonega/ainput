@@ -6,7 +6,7 @@ interface Model {
   id: string;
   name: string;
   apiKey: string;
-  type: "gemini" | "openai" | "anthropic" | "openrouter" | "custom";
+  type: "gemini" | "openai" | "openrouter" | "custom";
   baseUrl?: string;
   model?: string;
 }
@@ -16,7 +16,7 @@ const Options = () => {
   const [activeModelId, setActiveModelId] = useState<string | null>(null);
 
   const [newModelType, setNewModelType] = useState<
-    "gemini" | "openai" | "anthropic" | "openrouter" | "custom"
+    "gemini" | "openai" | "openrouter" | "custom"
   >("gemini");
   const [newModelName, setNewModelName] = useState<string>("");
   const [newModelApiKey, setNewModelApiKey] = useState<string>("");
@@ -103,8 +103,6 @@ const Options = () => {
       baseUrl:
         newModelType === "openai"
           ? "https://api.openai.com"
-          : newModelType === "anthropic"
-          ? "https://api.anthropic.com"
           : newModelType === "openrouter"
           ? "https://openrouter.ai/api"
           : newModelBaseUrl.trim(),
@@ -433,7 +431,6 @@ const Options = () => {
                     e.target.value as
                       | "gemini"
                       | "openai"
-                      | "anthropic"
                       | "openrouter"
                       | "custom"
                   )
@@ -442,7 +439,6 @@ const Options = () => {
               >
                 <option value="gemini">Gemini</option>
                 <option value="openai">OpenAI</option>
-                <option value="anthropic">Anthropic</option>
                 <option value="openrouter">OpenRouter</option>
                 <option value="custom">Custom (OpenAI Comp)</option>
               </select>
@@ -480,7 +476,6 @@ const Options = () => {
               </div>
             )}
             {(newModelType === "openai" ||
-              newModelType === "anthropic" ||
               newModelType === "openrouter" ||
               newModelType === "custom") && (
               <div style={formGroupStyle}>
@@ -492,8 +487,6 @@ const Options = () => {
                   placeholder={
                     newModelType === "openai"
                       ? "gpt-4"
-                      : newModelType === "anthropic"
-                      ? "claude-3-opus-20240229"
                       : newModelType === "openrouter"
                       ? "google/gemini-pro-2.5"
                       : "custom-model"
