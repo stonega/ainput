@@ -225,6 +225,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch((error) => sendResponse({ success: false, error: error.message }));
     return true;
   }
+
+  if (message.action === "openOptionsPage") {
+    chrome.runtime.openOptionsPage();
+  }
 });
 
 async function handleFixGrammar(text: string): Promise<string> {

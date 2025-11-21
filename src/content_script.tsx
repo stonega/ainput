@@ -9,6 +9,12 @@ import {
 } from "react-icons/md";
 import { Readability } from "@mozilla/readability";
 
+declare global {
+  interface Window {
+    hasShownAuthError?: boolean;
+  }
+}
+
 interface ButtonContainerProps {
   onFixGrammar: () => void;
   onTranslate: () => void;
@@ -145,6 +151,84 @@ const ButtonContainer: React.FC<ButtonContainerProps> = ({
 
 type EditableElement = HTMLInputElement | HTMLTextAreaElement | HTMLElement;
 
+/**
+ * Helper functions to get and set values for editable elements.
+ * Specially handles X.com (Twitter) input fields where the text content
+ * is nested deep within a span inside the editable div.
+ */
+
+const getXEditorRoot = (element: Element): HTMLElement | null => {
+  if (
+    window.location.hostname !== "x.com" &&
+    window.location.hostname !== "twitter.com"
+  ) {
+    return null;
+  }
+
+  const editorRoot = element.closest<HTMLElement>('[contenteditable="true"]');
+  if (!editorRoot) {
+    return null;
+  }
+
+  const testId = editorRoot.getAttribute("data-testid");
+  if (testId && testId.startsWith("tweetTextarea")) {
+    return editorRoot;
+  }
+
+  const ariaLabel = editorRoot.getAttribute("aria-label");
+  if (
+    ariaLabel &&
+    (ariaLabel.toLowerCase().includes("post text") ||
+      ariaLabel.toLowerCase().includes("tweet text"))
+  ) {
+    return editorRoot;
+  }
+
+  return null;
+};
+
+const getElementValue = (element: EditableElement): string => {
+  if ("value" in element) {
+    return (element as HTMLInputElement).value;
+  }
+
+  const xEditorRoot = getXEditorRoot(element);
+  if (xEditorRoot) {
+    const textHolder = xEditorRoot.querySelector('[data-text="true"]');
+    if (textHolder && textHolder.tagName.toUpperCase() !== "BR") {
+      return textHolder.textContent || "";
+    }
+    return ""; // Empty if it's a BR or not found
+  }
+
+  return element.textContent || "";
+};
+
+const setElementValue = (element: EditableElement, value: string) => {
+  if ("value" in element) {
+    (element as HTMLInputElement).value = value;
+    element.dispatchEvent(new Event("input", { bubbles: true }));
+    return;
+  }
+
+  const xEditorRoot = getXEditorRoot(element);
+  if (xEditorRoot) {
+    const textHolder = xEditorRoot.querySelector('[data-text="true"]');
+    if (textHolder) {
+      // It's safer to just update textContent on the existing element
+      textHolder.textContent = value;
+    } else {
+      // Fallback for empty or unexpected structure. This is risky.
+      xEditorRoot.textContent = value;
+    }
+    xEditorRoot.dispatchEvent(new Event("input", { bubbles: true }));
+    return;
+  }
+
+  element.textContent = value;
+  element.dispatchEvent(new Event("input", { bubbles: true }));
+};
+
 let activeInput: EditableElement | null = null;
 let accessoryContainer: HTMLDivElement | null = null;
 let removeListeners: (() => void) | null = null;
@@ -260,12 +344,7 @@ const InputAccessory: React.FC<{
       }
 
       currentText += words[wordIndex];
-      if ("value" in inputElement) {
-        inputElement.value = currentText;
-      } else {
-        inputElement.textContent = currentText;
-      }
-      inputElement.dispatchEvent(new Event("input", { bubbles: true }));
+      setElementValue(inputElement, currentText);
 
       wordIndex++;
     }, 50);
@@ -279,7 +358,7 @@ const InputAccessory: React.FC<{
     action: "fixGrammar" | "translate" | "enhancePrompt",
     element: EditableElement
   ) => {
-    const text = "value" in element ? element.value : element.textContent || "";
+    const text = getElementValue(element);
     if (!text.trim()) {
       alert("Please enter some text first.");
       return;
@@ -295,19 +374,41 @@ const InputAccessory: React.FC<{
       })) as unknown as MessageResponse;
 
       if (response && response.success && response.result) {
-        if ("value" in element) {
-          element.value = "";
+        if (getXEditorRoot(element)) {
+          setElementValue(element, response.result);
+          setLoading(false);
         } else {
-          element.textContent = "";
+          setElementValue(element, "");
+          setTextToAnimate(response.result);
         }
-        element.dispatchEvent(new Event("input", { bubbles: true }));
-        setTextToAnimate(response.result);
       } else {
-        alert("Error: " + (response?.error || `Failed to ${action}`));
+        const errorMessage = response?.error || `Failed to ${action}`;
+        if (
+          errorMessage.includes("model") ||
+          errorMessage.includes("API key") ||
+          errorMessage.includes("options")
+        ) {
+          if (confirm(errorMessage + " Click OK to open settings.")) {
+            chrome.runtime.sendMessage({ action: "openOptionsPage" });
+          }
+        } else {
+          alert("Error: " + errorMessage);
+        }
         setLoading(false);
       }
     } catch (error) {
-      alert("Error: " + error);
+      const errorMessage = String(error);
+      if (
+        errorMessage.includes("model") ||
+        errorMessage.includes("API key") ||
+        errorMessage.includes("options")
+      ) {
+        if (confirm(errorMessage + " Click OK to open settings.")) {
+          chrome.runtime.sendMessage({ action: "openOptionsPage" });
+        }
+      } else {
+        alert("Error: " + errorMessage);
+      }
       setLoading(false);
     }
   };
@@ -331,19 +432,41 @@ const InputAccessory: React.FC<{
       })) as unknown as MessageResponse;
 
       if (response && response.success && response.result) {
-        if ("value" in inputElement) {
-          (inputElement as HTMLInputElement).value = "";
+        if (getXEditorRoot(inputElement)) {
+          setElementValue(inputElement, response.result);
+          setLoading(false);
         } else {
-          inputElement.textContent = "";
+          setElementValue(inputElement, "");
+          setTextToAnimate(response.result);
         }
-        inputElement.dispatchEvent(new Event("input", { bubbles: true }));
-        setTextToAnimate(response.result);
       } else {
-        alert("Error: " + (response?.error || `Failed to auto reply`));
+        const errorMessage = response?.error || `Failed to auto reply`;
+        if (
+          errorMessage.includes("model") ||
+          errorMessage.includes("API key") ||
+          errorMessage.includes("options")
+        ) {
+          if (confirm(errorMessage + " Click OK to open settings.")) {
+            chrome.runtime.sendMessage({ action: "openOptionsPage" });
+          }
+        } else {
+          alert("Error: " + errorMessage);
+        }
         setLoading(false);
       }
     } catch (error) {
-      alert("Error: " + String(error));
+      const errorMessage = String(error);
+      if (
+        errorMessage.includes("model") ||
+        errorMessage.includes("API key") ||
+        errorMessage.includes("options")
+      ) {
+        if (confirm(errorMessage + " Click OK to open settings.")) {
+          chrome.runtime.sendMessage({ action: "openOptionsPage" });
+        }
+      } else {
+        alert("Error: " + errorMessage);
+      }
       setLoading(false);
     }
   };
@@ -455,9 +578,7 @@ function getCaretCoordinates(element: EditableElement, position: number) {
     style.visibility = "hidden";
   }
 
-  div.textContent = (
-    "value" in element ? element.value : element.textContent || ""
-  ).substring(0, position);
+  div.textContent = getElementValue(element).substring(0, position);
 
   if (isInput) {
     div.textContent = div.textContent.replace(/\s/g, " ");
@@ -465,7 +586,7 @@ function getCaretCoordinates(element: EditableElement, position: number) {
 
   const span = document.createElement("span");
   span.textContent =
-    ("value" in element ? element.value : element.textContent || "").substring(
+    getElementValue(element).substring(
       position
     ) || ".";
   div.appendChild(span);
@@ -619,8 +740,7 @@ document.addEventListener(
           target.tagName.toLowerCase().includes("div"));
 
       if (isEditable) {
-        const text =
-          "value" in target ? (target as HTMLInputElement).value : target.textContent || "";
+        const text = getElementValue(target);
         if (!text.trim()) {
           const documentClone = document.cloneNode(true) as Document;
           const article = new Readability(documentClone).parse();
@@ -642,25 +762,29 @@ document.addEventListener(
               }
 
               if (response && response.success && response.result) {
-                if ("value" in target) {
-                  (target as HTMLInputElement).value = "";
-                } else {
-                  target.textContent = "";
-                }
-                target.dispatchEvent(new Event("input", { bubbles: true }));
+                setElementValue(target, "");
                 // Not using the animated text for now for auto-reply
-                if ("value" in target) {
-                  (target as HTMLInputElement).value = response.result;
-                } else {
-                  target.textContent = response.result;
-                }
-                target.dispatchEvent(new Event("input", { bubbles: true }));
+                setElementValue(target, response.result);
               } else {
                 // Don't alert on auto-reply failure, just log it.
+                const errorMessage = response?.error || "Failed to get auto-reply";
                 console.error(
                   "AInput Auto Reply Error:",
-                  response?.error || "Failed to get auto-reply"
+                  errorMessage
                 );
+                 if (
+                  errorMessage.includes("model") ||
+                  errorMessage.includes("API key") ||
+                  errorMessage.includes("options")
+                ) {
+                   // Only ask once per session/page load to avoid spamming
+                   if (!window.hasShownAuthError) {
+                      window.hasShownAuthError = true;
+                      if (confirm(errorMessage + " Click OK to open settings.")) {
+                        chrome.runtime.sendMessage({ action: "openOptionsPage" });
+                      }
+                   }
+                }
               }
               target.dispatchEvent(new Event("ainput-loading-end"));
             }
@@ -798,10 +922,32 @@ const handleShortcut = async (action: "fixGrammar" | "translate") => {
         }
       }
     } else {
-      alert("Error: " + (response?.error || `Failed to ${action}`));
+      const errorMessage = response?.error || `Failed to ${action}`;
+      if (
+        errorMessage.includes("model") ||
+        errorMessage.includes("API key") ||
+        errorMessage.includes("options")
+      ) {
+        if (confirm(errorMessage + " Click OK to open settings.")) {
+          chrome.runtime.sendMessage({ action: "openOptionsPage" });
+        }
+      } else {
+        alert("Error: " + errorMessage);
+      }
     }
   } catch (error) {
-    alert("Error: " + error);
+    const errorMessage = String(error);
+    if (
+      errorMessage.includes("model") ||
+      errorMessage.includes("API key") ||
+      errorMessage.includes("options")
+    ) {
+      if (confirm(errorMessage + " Click OK to open settings.")) {
+        chrome.runtime.sendMessage({ action: "openOptionsPage" });
+      }
+    } else {
+      alert("Error: " + errorMessage);
+    }
   } finally {
     element.dispatchEvent(new Event("ainput-loading-end"));
   }

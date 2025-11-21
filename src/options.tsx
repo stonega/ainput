@@ -35,6 +35,65 @@ interface TokenUsage {
   tokens: number;
 }
 
+const Input = (props: React.InputHTMLAttributes<HTMLInputElement>) => (
+  <input
+    {...props}
+    className="input-focus transition-all"
+    style={{
+      width: "100%",
+      padding: "10px 12px",
+      fontSize: "14px",
+      border: `1px solid ${theme.colors.border}`,
+      borderRadius: theme.borderRadius.md,
+      backgroundColor: theme.colors.inputBg,
+      color: theme.colors.text,
+      ...props.style,
+    }}
+  />
+);
+
+const Select = (props: React.SelectHTMLAttributes<HTMLSelectElement>) => (
+  <select
+    {...props}
+    className="input-focus transition-all"
+    style={{
+      width: "100%",
+      padding: "10px 12px",
+      fontSize: "14px",
+      border: `1px solid ${theme.colors.border}`,
+      borderRadius: theme.borderRadius.md,
+      backgroundColor: theme.colors.inputBg,
+      color: theme.colors.text,
+      ...props.style,
+    }}
+  >
+    {props.children}
+  </select>
+);
+
+const Button = ({ variant = "primary", ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "danger" }) => (
+  <button
+    {...props}
+    className={`transition-all btn-${variant}`}
+    style={{
+      padding: "10px 20px",
+      backgroundColor: variant === "primary" ? theme.colors.primary : "transparent",
+      color: variant === "primary" ? "#fff" : theme.colors.danger,
+      border: variant === "danger" ? `1px solid ${theme.colors.danger}` : "none",
+      borderRadius: theme.borderRadius.md,
+      cursor: "pointer",
+      fontSize: "14px",
+      fontWeight: 600,
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: "8px",
+      opacity: props.disabled ? 0.6 : 1,
+      ...props.style,
+    }}
+  />
+);
+
 const Options = () => {
   // --- State ---
   const [models, setModels] = useState<Model[]>([]);
@@ -233,64 +292,8 @@ const Options = () => {
     </button>
   );
 
-  const Input = (props: React.InputHTMLAttributes<HTMLInputElement>) => (
-    <input
-      {...props}
-      className="input-focus transition-all"
-      style={{
-        width: "100%",
-        padding: "10px 12px",
-        fontSize: "14px",
-        border: `1px solid ${theme.colors.border}`,
-        borderRadius: theme.borderRadius.md,
-        backgroundColor: theme.colors.inputBg,
-        color: theme.colors.text,
-        ...props.style,
-      }}
-    />
-  );
 
-  const Select = (props: React.SelectHTMLAttributes<HTMLSelectElement>) => (
-    <select
-      {...props}
-      className="input-focus transition-all"
-      style={{
-        width: "100%",
-        padding: "10px 12px",
-        fontSize: "14px",
-        border: `1px solid ${theme.colors.border}`,
-        borderRadius: theme.borderRadius.md,
-        backgroundColor: theme.colors.inputBg,
-        color: theme.colors.text,
-        ...props.style,
-      }}
-    >
-      {props.children}
-    </select>
-  );
 
-  const Button = ({ variant = "primary", ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "danger" }) => (
-    <button
-      {...props}
-      className={`transition-all btn-${variant}`}
-      style={{
-        padding: "10px 20px",
-        backgroundColor: variant === "primary" ? theme.colors.primary : "transparent",
-        color: variant === "primary" ? "#fff" : theme.colors.danger,
-        border: variant === "danger" ? `1px solid ${theme.colors.danger}` : "none",
-        borderRadius: theme.borderRadius.md,
-        cursor: "pointer",
-        fontSize: "14px",
-        fontWeight: 600,
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: "8px",
-        opacity: props.disabled ? 0.6 : 1,
-        ...props.style,
-      }}
-    />
-  );
 
   // --- Render ---
 
