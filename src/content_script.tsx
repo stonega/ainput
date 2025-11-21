@@ -187,6 +187,15 @@ const getXEditorRoot = (element: Element): HTMLElement | null => {
   return null;
 };
 
+const getRedditEditorRoot = (element: Element): HTMLElement | null => {
+  if (!window.location.hostname.includes("reddit.com")) {
+    return null;
+  }
+  // Reddit uses the Lexical editor framework, which is marked by this attribute.
+  // This is more reliable than class names or other attributes that might change.
+  return element.closest<HTMLElement>('[data-lexical-editor="true"]');
+};
+
 const getElementValue = (element: EditableElement): string => {
   if ("value" in element) {
     return (element as HTMLInputElement).value;
@@ -199,6 +208,12 @@ const getElementValue = (element: EditableElement): string => {
       return textHolder.textContent || "";
     }
     return ""; // Empty if it's a BR or not found
+  }
+
+  const redditEditorRoot = getRedditEditorRoot(element);
+  if (redditEditorRoot) {
+    // For the lexical editor, textContent should give us the full text.
+    return redditEditorRoot.textContent || "";
   }
 
   return element.textContent || "";
@@ -222,6 +237,44 @@ const setElementValue = (element: EditableElement, value: string) => {
       xEditorRoot.textContent = value;
     }
     xEditorRoot.dispatchEvent(new Event("input", { bubbles: true }));
+    return;
+  }
+
+  const redditEditorRoot = getRedditEditorRoot(element);
+  if (redditEditorRoot) {
+    // For rich text editors like Reddit's, we need to simulate events
+    // more closely to ensure the editor's internal state is updated.
+    redditEditorRoot.focus();
+
+    // 1. Select all existing content
+    const selection = window.getSelection();
+    if (selection) {
+      const range = document.createRange();
+      range.selectNodeContents(redditEditorRoot);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+
+    // 2. Fire a "beforeinput" event. This is crucial for many modern editors.
+    const beforeInputEvent = new InputEvent("beforeinput", {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      inputType: "insertText",
+      data: value,
+    });
+    redditEditorRoot.dispatchEvent(beforeInputEvent);
+
+    // 3. If the event wasn't cancelled, insert the text.
+    if (!beforeInputEvent.defaultPrevented) {
+      document.execCommand("insertText", false, value);
+    }
+
+    // 4. An "input" event might also be needed.
+    redditEditorRoot.dispatchEvent(
+      new Event("input", { bubbles: true, cancelable: true })
+    );
+
     return;
   }
 
@@ -374,7 +427,7 @@ const InputAccessory: React.FC<{
       })) as unknown as MessageResponse;
 
       if (response && response.success && response.result) {
-        if (getXEditorRoot(element)) {
+        if (getXEditorRoot(element) || getRedditEditorRoot(element)) {
           setElementValue(element, response.result);
           setLoading(false);
         } else {
@@ -432,7 +485,7 @@ const InputAccessory: React.FC<{
       })) as unknown as MessageResponse;
 
       if (response && response.success && response.result) {
-        if (getXEditorRoot(inputElement)) {
+        if (getXEditorRoot(inputElement) || getRedditEditorRoot(inputElement)) {
           setElementValue(inputElement, response.result);
           setLoading(false);
         } else {

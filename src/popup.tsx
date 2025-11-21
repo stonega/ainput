@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { IoSettingsOutline } from "react-icons/io5";
-import { FaPowerOff, FaRobot, FaExternalLinkAlt } from "react-icons/fa";
+import { FaPowerOff, FaRobot, FaExternalLinkAlt, FaExclamationCircle } from "react-icons/fa";
 import { theme, GlobalStyles } from "./theme";
 
 // --- Components ---
@@ -86,6 +86,7 @@ const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
 
 export const Popup = () => {
   const [currentOrigin, setCurrentOrigin] = useState<string>();
+  const [currentUrl, setCurrentUrl] = useState<string>();
   const [activeTabId, setActiveTabId] = useState<number>();
   const [isDisabled, setIsDisabled] = useState<boolean | null>(null);
   const [isAutoReplyEnabled, setIsAutoReplyEnabled] = useState<boolean | null>(null);
@@ -95,12 +96,14 @@ export const Popup = () => {
       const tab = tabs[0];
       if (!tab || !tab.url) {
         setCurrentOrigin(undefined);
+        setCurrentUrl(undefined);
         setActiveTabId(undefined);
         setIsDisabled(null);
         setIsAutoReplyEnabled(null);
         return;
       }
       setActiveTabId(tab.id);
+      setCurrentUrl(tab.url);
       try {
         const url = new URL(tab.url);
         const origin = url.origin;
@@ -114,6 +117,7 @@ export const Popup = () => {
       } catch (error) {
         console.error("Unable to parse tab URL:", error);
         setCurrentOrigin(undefined);
+        setCurrentUrl(undefined);
         setIsDisabled(null);
         setIsAutoReplyEnabled(null);
       }
@@ -160,6 +164,13 @@ export const Popup = () => {
 
   const openOptionsPage = () => {
     chrome.runtime.openOptionsPage();
+  };
+
+  const handleSubmitIssue = () => {
+    if (!currentUrl) return;
+    const title =  `Report an issue on ${new URL(currentUrl).hostname}`;
+    const url = `https://github.com/stonega/ainput/issues/new?title=${encodeURIComponent(title)}`;
+    chrome.tabs.create({ url });
   };
 
   const isLoading = isDisabled === null || !currentOrigin || activeTabId === undefined;
@@ -235,22 +246,44 @@ export const Popup = () => {
 
       {/* Footer */}
       <footer style={{ marginTop: "16px", paddingTop: "12px", borderTop: `1px solid ${theme.colors.border}`, textAlign: "center" }}>
-        <button 
-          onClick={openOptionsPage}
-          style={{
-            background: "none",
-            border: "none",
-            color: theme.colors.primary,
-            fontSize: "13px",
-            fontWeight: 500,
-            cursor: "pointer",
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "4px"
-          }}
-        >
-          More settings <FaExternalLinkAlt size={10} />
-        </button>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <button
+            onClick={handleSubmitIssue}
+            className="btn-icon"
+            style={{
+              background: "none",
+              border: "none",
+              color: theme.colors.textSecondary,
+              fontSize: "13px",
+              fontWeight: 500,
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "8px",
+              borderRadius: theme.borderRadius.md,
+            }}
+            title="Submit an issue on GitHub"
+          >
+            <FaExclamationCircle size={13} /> Submit issue
+          </button>
+          <button
+            onClick={openOptionsPage}
+            style={{
+              background: "none",
+              border: "none",
+              color: theme.colors.primary,
+              fontSize: "13px",
+              fontWeight: 500,
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "4px"
+            }}
+          >
+            More settings <FaExternalLinkAlt size={10} />
+          </button>
+        </div>
       </footer>
     </div>
   );
