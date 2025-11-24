@@ -18,6 +18,8 @@ import { theme, GlobalStyles } from "./theme";
 
 // --- Types ---
 
+const FREE_OPENROUTER_API_KEY = "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";
+
 interface Model {
   id: string;
   name: string;
@@ -129,20 +131,44 @@ const Options = () => {
         if (items.models && items.models.length > 0) {
           setModels(items.models);
           setActiveModelId(items.activeModelId);
-        } else if (items.apiKey) {
-          // Migration
-          const defaultGeminiModel: Model = {
-            id: "gemini-default",
-            name: "Gemini (Default)",
-            apiKey: items.apiKey,
-            type: "gemini",
-            model: "gemini-2.5-flash",
-          };
-          setModels([defaultGeminiModel]);
-          setActiveModelId(defaultGeminiModel.id);
+        } else {
+          // Migration or Fresh Install
+          const freeModels: Model[] = [
+            {
+              id: "grok-free",
+              name: "Grok 4.1 Fast (Free)",
+              apiKey: FREE_OPENROUTER_API_KEY,
+              type: "openrouter",
+              baseUrl: "https://openrouter.ai/api",
+              model: "x-ai/grok-4.1-fast:free",
+            },
+            {
+              id: "gpt-oss-free",
+              name: "GPT OSS 20B (Free)",
+              apiKey: FREE_OPENROUTER_API_KEY,
+              type: "openrouter",
+              baseUrl: "https://openrouter.ai/api",
+              model: "openai/gpt-oss-20b:free",
+            },
+            {
+              id: "deepseek-r1-free",
+              name: "DeepSeek R1 (Free)",
+              apiKey: FREE_OPENROUTER_API_KEY,
+              type: "openrouter",
+              baseUrl: "https://openrouter.ai/api",
+              model: "deepseek/deepseek-r1-0528:free",
+            },
+          ];
+
+          const initialModels = [...freeModels];
+
+          setModels(initialModels);
+          const initialActiveId = freeModels[0].id;
+          setActiveModelId(initialActiveId);
+          
           chrome.storage.sync.set({
-            models: [defaultGeminiModel],
-            activeModelId: defaultGeminiModel.id,
+            models: initialModels,
+            activeModelId: initialActiveId,
             apiKey: "",
           });
         }
@@ -456,6 +482,26 @@ const Options = () => {
                         </button>
                       </div>
                     ))}
+                    
+                    {!models.some(m => m.apiKey !== FREE_OPENROUTER_API_KEY) && (
+                       <div style={{
+                         marginTop: "12px",
+                         padding: "12px 16px",
+                         backgroundColor: "#f0f9ff",
+                         border: "1px solid #bae6fd",
+                         borderRadius: theme.borderRadius.md,
+                         color: "#0369a1",
+                         fontSize: "14px",
+                         display: "flex",
+                         alignItems: "center",
+                         gap: "12px"
+                       }}>
+                         <FaExclamationCircle size={16} />
+                         <span>
+                           <strong>Tip:</strong> The free models are great for testing, but for the best experience (faster speed & higher limits), we recommend adding your own API key below.
+                         </span>
+                       </div>
+                    )}
                   </div>
                 )}
               </div>
