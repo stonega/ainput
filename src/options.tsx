@@ -18,7 +18,7 @@ import { theme, GlobalStyles } from "./theme";
 
 // --- Types ---
 
-const FREE_OPENROUTER_API_KEY = "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";
+const FREE_OPENROUTER_API_KEY = process.env.FREE_OPENROUTER_API_KEY || "";
 
 interface Model {
   id: string;

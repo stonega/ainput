@@ -39,5 +39,8 @@ module.exports = {
             patterns: [{ from: ".", to: "../", context: "public" }],
             options: {},
         }),
+        new webpack.DefinePlugin({
+            'process.env.FREE_OPENROUTER_API_KEY': JSON.stringify(process.env.FREE_OPENROUTER_API_KEY),
+        }),
     ],
 };

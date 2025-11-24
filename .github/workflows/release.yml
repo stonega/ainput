@@ -26,6 +26,8 @@ jobs:
           node-version: '22.x'
       - run: npm ci
       - run: npm run build
+        env:
+          FREE_OPENROUTER_API_KEY: ${{ secrets.FREE_OPENROUTER_API_KEY }}
       - name: Pack extension
         run: npx bestzip ainput_chrome_${{ github.ref_name }}.zip dist/*
       - name: Create Release

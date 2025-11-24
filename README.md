@@ -14,7 +14,14 @@ AInput is a powerful Chrome extension that enhances text input on any web page u
 
 ### Custom Models
 
-In addition to the default Google Gemini 2.0 Flash model, you can also use other models like OpenAI's GPT-4 or a custom model from OpenRouter. This allows you to use the model you prefer and leverage its unique capabilities.
+In addition to the default Google Gemini 2.5 Flash model, you can also use other models like OpenAI's GPT-4 or a custom model from OpenRouter. This allows you to use the model you prefer and leverage its unique capabilities.
+
+For new users, we provide 3 **free** pre-configured models to get you started immediately without needing your own API key:
+- **Grok 4.1 Fast (Free)**
+- **GPT OSS 20B (Free)**
+- **DeepSeek R1 (Free)**
+
+These free models are great for testing the extension. However, for faster speeds and higher rate limits, we recommend adding your own API key in the "Models" tab.
 
 To use a custom model, go to the extension's options page, click on the "Models" tab, and then click "Add New Model". You can then select the model type and enter the necessary information, such as the API key, base URL, and model string.
 
