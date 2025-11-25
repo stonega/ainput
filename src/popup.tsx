@@ -3,6 +3,14 @@ import { createRoot } from "react-dom/client";
 import { IoSettingsOutline } from "react-icons/io5";
 import { FaPowerOff, FaRobot, FaExternalLinkAlt, FaExclamationCircle } from "react-icons/fa";
 import { theme, GlobalStyles } from "./theme";
+import {
+  isSiteDisabled,
+  addDisabledSite,
+  removeDisabledSite,
+  isAutoReplyEnabledForSite,
+  addAutoReplySite,
+  removeAutoReplySite
+} from "./site_exclusions";
 
 // --- Components ---
 
@@ -108,11 +116,12 @@ export const Popup = () => {
         const url = new URL(tab.url);
         const origin = url.origin;
         setCurrentOrigin(origin);
-        chrome.storage.sync.get(["disabledSites", "autoReplySites"], (items) => {
-          const disabledSites: string[] = items.disabledSites || [];
-          setIsDisabled(disabledSites.includes(origin));
-          const autoReplySites: string[] = items.autoReplySites || [];
-          setIsAutoReplyEnabled(autoReplySites.includes(origin));
+        Promise.all([
+          isSiteDisabled(origin),
+          isAutoReplyEnabledForSite(origin)
+        ]).then(([disabled, autoReply]) => {
+          setIsDisabled(disabled);
+          setIsAutoReplyEnabled(autoReply);
         });
       } catch (error) {
         console.error("Unable to parse tab URL:", error);
@@ -124,42 +133,41 @@ export const Popup = () => {
     });
   }, []);
 
-  const handleToggleExtension = () => {
+  const handleToggleExtension = async () => {
     if (!currentOrigin || activeTabId === undefined || isDisabled === null) return;
     const nextDisabled = !isDisabled;
-    chrome.storage.sync.get(["disabledSites"], (items) => {
-      const disabledSites = new Set<string>(items.disabledSites || []);
+    
+    try {
       if (nextDisabled) {
-        disabledSites.add(currentOrigin);
+        await addDisabledSite(currentOrigin);
       } else {
-        disabledSites.delete(currentOrigin);
+        await removeDisabledSite(currentOrigin);
       }
-      chrome.storage.sync.set({ disabledSites: Array.from(disabledSites) }, () => {
-        if (chrome.runtime.lastError) return;
-        setIsDisabled(nextDisabled);
-        chrome.tabs.sendMessage(activeTabId, {
-          action: "setExtensionEnabled",
-          enabled: !nextDisabled,
-        });
+      
+      setIsDisabled(nextDisabled);
+      chrome.tabs.sendMessage(activeTabId, {
+        action: "setExtensionEnabled",
+        enabled: !nextDisabled,
       });
-    });
+    } catch (error) {
+      console.error("Failed to toggle extension:", error);
+    }
   };
 
-  const handleToggleAutoReply = () => {
+  const handleToggleAutoReply = async () => {
     if (!currentOrigin || activeTabId === undefined || isAutoReplyEnabled === null) return;
     const nextAutoReplyEnabled = !isAutoReplyEnabled;
-    chrome.storage.sync.get(["autoReplySites"], (items) => {
-      const autoReplySites = new Set<string>(items.autoReplySites || []);
+    
+    try {
       if (nextAutoReplyEnabled) {
-        autoReplySites.add(currentOrigin);
+        await addAutoReplySite(currentOrigin);
       } else {
-        autoReplySites.delete(currentOrigin);
+        await removeAutoReplySite(currentOrigin);
       }
-      chrome.storage.sync.set({ autoReplySites: Array.from(autoReplySites) }, () => {
-        if (chrome.runtime.lastError) return;
-        setIsAutoReplyEnabled(nextAutoReplyEnabled);
-      });
-    });
+      setIsAutoReplyEnabled(nextAutoReplyEnabled);
+    } catch (error) {
+      console.error("Failed to toggle auto-reply:", error);
+    }
   };
 
   const openOptionsPage = () => {

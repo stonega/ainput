@@ -15,6 +15,7 @@ import {
 } from "react-icons/fa";
 import { getTokenUsage } from "./db";
 import { theme, GlobalStyles } from "./theme";
+import { getDisabledSites, removeDisabledSite } from "./site_exclusions";
 
 // --- Types ---
 
@@ -125,7 +126,6 @@ const Options = () => {
         models: [],
         activeModelId: null,
         targetLanguage: "English",
-        disabledSites: [],
       },
       (items) => {
         if (items.models && items.models.length > 0) {
@@ -173,9 +173,10 @@ const Options = () => {
           });
         }
         setTargetLanguage(items.targetLanguage);
-        setDisabledSites(items.disabledSites);
       }
     );
+
+    getDisabledSites().then(setDisabledSites);
   }, []);
 
   useEffect(() => {
@@ -277,12 +278,14 @@ const Options = () => {
     chrome.storage.sync.set({ activeModelId: id });
   };
 
-  const removeSite = (siteToRemove: string) => {
-    const updatedSites = disabledSites.filter((site) => site !== siteToRemove);
-    chrome.storage.sync.set({ disabledSites: updatedSites }, () => {
-      setDisabledSites(updatedSites);
+  const removeSite = async (siteToRemove: string) => {
+    try {
+      await removeDisabledSite(siteToRemove);
+      setDisabledSites((prev) => prev.filter((site) => site !== siteToRemove));
       showStatus(`Removed ${siteToRemove} from disabled list.`);
-    });
+    } catch (error) {
+      showStatus("Failed to remove site.", 'error');
+    }
   };
 
   // --- Components ---

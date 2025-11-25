@@ -8,6 +8,10 @@ import {
   MdReply,
 } from "react-icons/md";
 import { Readability } from "@mozilla/readability";
+import { 
+  isSiteDisabled, 
+  isAutoReplyEnabledForSite as checkAutoReplyEnabled 
+} from "./site_exclusions";
 
 declare global {
   interface Window {
@@ -748,17 +752,16 @@ function hideAccessory() {
 let isExtensionEnabled = true;
 let isAutoReplyEnabledForSite = false;
 
-function checkIsEnabled() {
+async function checkIsEnabled() {
   const currentOrigin = window.location.origin;
-  chrome.storage.sync.get(["disabledSites", "autoReplySites"], (data) => {
-    const disabledSites = data.disabledSites || [];
-    isExtensionEnabled = !disabledSites.includes(currentOrigin);
-    if (!isExtensionEnabled) {
-      hideAccessory();
-    }
-    const autoReplySites = data.autoReplySites || [];
-    isAutoReplyEnabledForSite = autoReplySites.includes(currentOrigin);
-  });
+  
+  const disabled = await isSiteDisabled(currentOrigin);
+  isExtensionEnabled = !disabled;
+  if (!isExtensionEnabled) {
+    hideAccessory();
+  }
+
+  isAutoReplyEnabledForSite = await checkAutoReplyEnabled(currentOrigin);
 }
 
 checkIsEnabled();
