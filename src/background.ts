@@ -285,23 +285,26 @@ async function handleAutoFillForm(fields: FormFieldInfo[]): Promise<Record<strin
     return `- "${field.name}" (${details.join(", ")})`;
   }).join("\n");
 
-  const prompt = `Generate realistic fake data for a web form. The data should look authentic but be completely fictional (not real person's data).
+  const prompt = `Generate realistic data for a web form. The data should look completely authentic and natural, as if from a real person.
 
 Form fields to fill:
 ${fieldDescriptions}
 
 Important rules:
-1. Generate realistic-looking but FAKE data (do not use real people's information)
-2. Email should use a common domain like @example.com or @test.com
-3. Phone numbers should use valid format but be obviously fake (e.g., 555-xxx-xxxx)
-4. Addresses should be plausible but fictional
-5. Names should sound realistic
-6. For "message", "bio", or "comment" fields, generate appropriate short text
-7. Return ONLY a valid JSON object with field names as keys and generated values as strings
-8. Do not include any explanations, markdown formatting, or code blocks - just the raw JSON object
+1. Generate highly realistic data that looks genuine and natural
+2. Email should use real-world domains like @gmail.com, @yahoo.com, @outlook.com, @hotmail.com, or @icloud.com
+3. Phone numbers should follow real formats (e.g., (415) 555-1234, +1 312-555-6789)
+4. Addresses should use real city names, valid state abbreviations, and realistic street names
+5. Names should be common, realistic names that sound natural
+6. For "message", "bio", or "comment" fields, write natural, contextually appropriate text
+7. ZIP codes should be valid format for the region (e.g., 5-digit for US)
+8. Company names should sound like real businesses
+9. Usernames should look like real usernames people would choose
+10. Return ONLY a valid JSON object with field names as keys and generated values as strings
+11. Do not include any explanations, markdown formatting, or code blocks - just the raw JSON object
 
 Example output format:
-{"firstName": "John", "lastName": "Smith", "email": "john.smith@example.com"}
+{"firstName": "Michael", "lastName": "Chen", "email": "michael.chen92@gmail.com", "phone": "(628) 555-4721"}
 
 Generate the JSON:`;
 
