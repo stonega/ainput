@@ -226,6 +226,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.action === "autoFillForm") {
+    handleAutoFillForm(message.fields)
+      .then((result) => sendResponse({ success: true, result }))
+      .catch((error) => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
+
   if (message.action === "openOptionsPage") {
     chrome.runtime.openOptionsPage();
   }
@@ -260,6 +267,62 @@ async function handleAutoReply(pageContent: string): Promise<string> {
   return await callApi(prompt, "autoReply");
 }
 
+interface FormFieldInfo {
+  id: string;
+  name: string;
+  type: string;
+  label: string;
+  placeholder: string;
+  autocomplete: string;
+}
+
+async function handleAutoFillForm(fields: FormFieldInfo[]): Promise<Record<string, string>> {
+  const fieldDescriptions = fields.map((field) => {
+    const details = [];
+    if (field.label) details.push(`label: "${field.label}"`);
+    if (field.placeholder) details.push(`placeholder: "${field.placeholder}"`);
+    details.push(`detected type: ${field.type}`);
+    return `- "${field.name}" (${details.join(", ")})`;
+  }).join("\n");
+
+  const prompt = `Generate realistic data for a web form. The data should look completely authentic and natural, as if from a real person.
+
+Form fields to fill:
+${fieldDescriptions}
+
+Important rules:
+1. Generate highly realistic data that looks genuine and natural
+2. Email should use real-world domains like @gmail.com, @yahoo.com, @outlook.com, @hotmail.com, or @icloud.com
+3. Phone numbers should follow real formats (e.g., (415) 555-1234, +1 312-555-6789)
+4. Addresses should use real city names, valid state abbreviations, and realistic street names
+5. Names should be common, realistic names that sound natural
+6. For "message", "bio", or "comment" fields, write natural, contextually appropriate text
+7. ZIP codes should be valid format for the region (e.g., 5-digit for US)
+8. Company names should sound like real businesses
+9. Usernames should look like real usernames people would choose
+10. Return ONLY a valid JSON object with field names as keys and generated values as strings
+11. Do not include any explanations, markdown formatting, or code blocks - just the raw JSON object
+
+Example output format:
+{"firstName": "Michael", "lastName": "Chen", "email": "michael.chen92@gmail.com", "phone": "(628) 555-4721"}
+
+Generate the JSON:`;
+
+  const result = await callApi(prompt, "autoFillForm");
+  
+  // Parse the JSON response
+  try {
+    // Try to extract JSON from the response (in case there's extra text)
+    const jsonMatch = result.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+    return JSON.parse(result);
+  } catch (error) {
+    throw new Error("Failed to parse AI response as JSON. Please try again.");
+  }
+}
+
 chrome.commands.onCommand.addListener((command) => {
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     if (tabs[0] && tabs[0].id) {
@@ -267,6 +330,8 @@ chrome.commands.onCommand.addListener((command) => {
         chrome.tabs.sendMessage(tabs[0].id, { action: "fixGrammarShortcut" });
       } else if (command === "translate") {
         chrome.tabs.sendMessage(tabs[0].id, { action: "translateShortcut" });
+      } else if (command === "auto-fill-form") {
+        chrome.tabs.sendMessage(tabs[0].id, { action: "autoFillFormShortcut" });
       }
     }
   });
