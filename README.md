@@ -10,6 +10,7 @@ AInput is a powerful Chrome extension that enhances text input on any web page u
 ✨ **Fix Grammar** - Automatically fix grammar and spelling errors in your text
 🌐 **Translate** - Translate text to your preferred language
 🤖 **Auto Reply** - Generate a relevant reply based on the page content
+📝 **Auto Fill Form** - Automatically fill form fields with AI-generated realistic data
 ⚡ **Real-time Processing** - Instant AI-powered text enhancement
 
 ### Custom Models
@@ -86,6 +87,28 @@ npm run build
 3. Click "Enable Auto Reply for this site".
 4. Now, whenever you focus on a text input on that site, an auto-reply will be generated based on the page's content.
 
+### Auto Fill Form Usage
+
+The Auto Fill Form feature helps you quickly fill out web forms with realistic AI-generated data. This is useful for testing forms, signing up for services, or any situation where you need to fill in form fields quickly.
+
+**How to use:**
+
+1. Click on any input field within a form
+2. Click the blue dot that appears next to the input
+3. Select "Auto Fill Form" from the menu
+4. The AI will analyze all empty fields in the form and fill them with appropriate data
+
+**Keyboard Shortcut:** Press `Ctrl+Shift+A` (Windows/Linux) or `Cmd+Shift+A` (Mac) while focused on a form field.
+
+**Supported field types:**
+- Personal info: First name, Last name, Full name, Username
+- Contact: Email, Phone number, Website
+- Address: Street address, City, State, ZIP code, Country
+- Professional: Company name, Job title
+- Other: Bio, Message, Comments, and more
+
+The AI automatically detects field types based on field names, labels, placeholders, and autocomplete attributes, then generates contextually appropriate realistic data.
+
 ## Supported Languages for Translation
 
 - Spanish
@@ -146,10 +169,11 @@ npm run style
 
 ## How It Works
 
-1. **Content Script** - Injects "Fix Grammar" and "Translate" buttons next to all text inputs
-2. **Background Worker** - Handles API calls to Google Gemini 2.0 Flash, OpenAI, or a custom model
-3. **Chrome Storage** - Securely stores your API key and preferences
-4. **React Components** - Modern UI with TypeScript for type safety
+1. **Content Script** - Injects action buttons (Fix Grammar, Translate, Auto Reply, Auto Fill Form) next to all text inputs
+2. **Background Worker** - Handles API calls to Google Gemini 2.5 Flash, OpenAI, or a custom model
+3. **Form Detection** - Intelligently detects form field types for auto-fill functionality
+4. **Chrome Storage** - Securely stores your API key and preferences
+5. **React Components** - Modern UI with TypeScript for type safety
 
 ## API Rate Limits
 
