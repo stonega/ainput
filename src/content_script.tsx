@@ -9,6 +9,13 @@ import {
   MdDynamicForm,
 } from "react-icons/md";
 import { Readability } from "@mozilla/readability";
+import {
+  EditableElement,
+  getXEditorRoot,
+  getRedditEditorRoot,
+  getElementValue,
+  setElementValue,
+} from "./siteExceptions";
 
 declare global {
   interface Window {
