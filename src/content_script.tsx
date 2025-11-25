@@ -6,6 +6,7 @@ import {
   MdHourglassEmpty,
   MdAutoAwesome,
   MdReply,
+  MdInput,
 } from "react-icons/md";
 import { Readability } from "@mozilla/readability";
 
@@ -20,6 +21,7 @@ interface ButtonContainerProps {
   onTranslate: () => void;
   onEnhancePrompt: () => void;
   onAutoReply: () => void;
+  onAutoComplete: () => void;
   loading: boolean;
 }
 
@@ -34,12 +36,14 @@ const ButtonContainer: React.FC<ButtonContainerProps> = ({
   onTranslate,
   onEnhancePrompt,
   onAutoReply,
+  onAutoComplete,
   loading,
 }) => {
   const [hoverFix, setHoverFix] = React.useState(false);
   const [hoverTranslate, setHoverTranslate] = React.useState(false);
   const [hoverEnhance, setHoverEnhance] = React.useState(false);
   const [hoverAutoReply, setHoverAutoReply] = React.useState(false);
+  const [hoverAutoComplete, setHoverAutoComplete] = React.useState(false);
 
   const buttonStyle: React.CSSProperties = {
     display: "flex",
@@ -131,6 +135,21 @@ const ButtonContainer: React.FC<ButtonContainerProps> = ({
         <span style={{ whiteSpace: "nowrap" }}>Auto Reply</span>
       </button>
       <button
+        onClick={onAutoComplete}
+        disabled={loading}
+        onMouseEnter={() => setHoverAutoComplete(true)}
+        onMouseLeave={() => setHoverAutoComplete(false)}
+        style={{
+          ...buttonStyle,
+          backgroundColor: hoverAutoComplete ? "#f0f0f0" : "transparent",
+          cursor: loading ? "not-allowed" : "pointer",
+          opacity: loading ? 0.6 : 1,
+        }}
+      >
+        <MdInput size={16} color="#FF5722" />
+        <span style={{ whiteSpace: "nowrap" }}>Auto Complete</span>
+      </button>
+      <button
         onClick={onEnhancePrompt}
         disabled={loading}
         onMouseEnter={() => setHoverEnhance(true)}
@@ -150,6 +169,34 @@ const ButtonContainer: React.FC<ButtonContainerProps> = ({
 };
 
 type EditableElement = HTMLInputElement | HTMLTextAreaElement | HTMLElement;
+
+const getInputContext = (element: EditableElement) => {
+  let label = "";
+  let placeholder = "";
+
+  if (
+    element instanceof HTMLInputElement ||
+    element instanceof HTMLTextAreaElement
+  ) {
+    placeholder = element.placeholder || "";
+    if (element.id) {
+      const labelElement = document.querySelector(`label[for="${element.id}"]`);
+      if (labelElement) {
+        label = labelElement.textContent || "";
+      }
+    }
+    if (!label && element.parentElement?.tagName === "LABEL") {
+      label = element.parentElement.textContent || "";
+    }
+    if (!label) {
+      label = element.getAttribute("aria-label") || "";
+    }
+  } else if (element.isContentEditable) {
+    label = element.getAttribute("aria-label") || "";
+  }
+
+  return { label, placeholder };
+};
 
 /**
  * Helper functions to get and set values for editable elements.
@@ -470,6 +517,63 @@ const InputAccessory: React.FC<{
   const onTranslate = () => handleAction("translate", inputElement);
   const onEnhancePrompt = () => handleAction("enhancePrompt", inputElement);
 
+  const onAutoComplete = async () => {
+    setPopoverVisible(false);
+    setLoading(true);
+
+    try {
+      const { label, placeholder } = getInputContext(inputElement);
+      const documentClone = document.cloneNode(true) as Document;
+      const article = new Readability(documentClone).parse();
+      const pageContent = article?.textContent?.slice(0, 2000) || "";
+
+      const response = (await chrome.runtime.sendMessage({
+        action: "autoComplete",
+        label,
+        placeholder,
+        pageContent,
+      })) as unknown as MessageResponse;
+
+      if (response && response.success && response.result) {
+        if (getXEditorRoot(inputElement) || getRedditEditorRoot(inputElement)) {
+          setElementValue(inputElement, response.result);
+          setLoading(false);
+        } else {
+          setElementValue(inputElement, "");
+          setTextToAnimate(response.result);
+        }
+      } else {
+        const errorMessage = response?.error || `Failed to auto complete`;
+        if (
+          errorMessage.includes("model") ||
+          errorMessage.includes("API key") ||
+          errorMessage.includes("options")
+        ) {
+          if (confirm(errorMessage + " Click OK to open settings.")) {
+            chrome.runtime.sendMessage({ action: "openOptionsPage" });
+          }
+        } else {
+          alert("Error: " + errorMessage);
+        }
+        setLoading(false);
+      }
+    } catch (error) {
+      const errorMessage = String(error);
+      if (
+        errorMessage.includes("model") ||
+        errorMessage.includes("API key") ||
+        errorMessage.includes("options")
+      ) {
+        if (confirm(errorMessage + " Click OK to open settings.")) {
+          chrome.runtime.sendMessage({ action: "openOptionsPage" });
+        }
+      } else {
+        alert("Error: " + errorMessage);
+      }
+      setLoading(false);
+    }
+  };
+
   const onAutoReply = async () => {
     setPopoverVisible(false);
     setLoading(true);
@@ -561,6 +665,7 @@ const InputAccessory: React.FC<{
             onTranslate={onTranslate}
             onEnhancePrompt={onEnhancePrompt}
             onAutoReply={onAutoReply}
+            onAutoComplete={onAutoComplete}
             loading={loading}
           />
         </div>

@@ -226,6 +226,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.action === "autoComplete") {
+    handleAutoComplete(message.label, message.placeholder, message.pageContent)
+      .then((result) => sendResponse({ success: true, result }))
+      .catch((error) => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
+
   if (message.action === "openOptionsPage") {
     chrome.runtime.openOptionsPage();
   }
@@ -258,6 +265,26 @@ async function handleAutoReply(pageContent: string): Promise<string> {
   const prompt = `Based on the following page content, generate a concise and relevant reply. The reply should be suitable for a comment or a short message. Return only the suggested reply, without any introductory phrases like "Here's a reply:" or any other explanations.\n\nPage Content:\n"""\n${pageContent}\n"""\n\nSuggested Reply:`;
 
   return await callApi(prompt, "autoReply");
+}
+
+async function handleAutoComplete(
+  label: string,
+  placeholder: string,
+  pageContent: string
+): Promise<string> {
+  const prompt = `Based on the page content provided below, generate a relevant value for a form field.
+  
+  Field Label: ${label}
+  Field Placeholder: ${placeholder}
+  
+  Page Content:
+  """
+  ${pageContent}
+  """
+  
+  Return ONLY the value to be filled in the form field, without any explanations or quotes.`;
+
+  return await callApi(prompt, "autoComplete");
 }
 
 chrome.commands.onCommand.addListener((command) => {
