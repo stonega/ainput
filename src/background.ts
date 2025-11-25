@@ -226,6 +226,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.action === "autoFillForm") {
+    handleAutoFillForm(message.fields)
+      .then((result) => sendResponse({ success: true, result }))
+      .catch((error) => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
+
   if (message.action === "openOptionsPage") {
     chrome.runtime.openOptionsPage();
   }
@@ -260,6 +267,59 @@ async function handleAutoReply(pageContent: string): Promise<string> {
   return await callApi(prompt, "autoReply");
 }
 
+interface FormFieldInfo {
+  id: string;
+  name: string;
+  type: string;
+  label: string;
+  placeholder: string;
+  autocomplete: string;
+}
+
+async function handleAutoFillForm(fields: FormFieldInfo[]): Promise<Record<string, string>> {
+  const fieldDescriptions = fields.map((field) => {
+    const details = [];
+    if (field.label) details.push(`label: "${field.label}"`);
+    if (field.placeholder) details.push(`placeholder: "${field.placeholder}"`);
+    details.push(`detected type: ${field.type}`);
+    return `- "${field.name}" (${details.join(", ")})`;
+  }).join("\n");
+
+  const prompt = `Generate realistic fake data for a web form. The data should look authentic but be completely fictional (not real person's data).
+
+Form fields to fill:
+${fieldDescriptions}
+
+Important rules:
+1. Generate realistic-looking but FAKE data (do not use real people's information)
+2. Email should use a common domain like @example.com or @test.com
+3. Phone numbers should use valid format but be obviously fake (e.g., 555-xxx-xxxx)
+4. Addresses should be plausible but fictional
+5. Names should sound realistic
+6. For "message", "bio", or "comment" fields, generate appropriate short text
+7. Return ONLY a valid JSON object with field names as keys and generated values as strings
+8. Do not include any explanations, markdown formatting, or code blocks - just the raw JSON object
+
+Example output format:
+{"firstName": "John", "lastName": "Smith", "email": "john.smith@example.com"}
+
+Generate the JSON:`;
+
+  const result = await callApi(prompt, "autoFillForm");
+  
+  // Parse the JSON response
+  try {
+    // Try to extract JSON from the response (in case there's extra text)
+    const jsonMatch = result.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+    return JSON.parse(result);
+  } catch (error) {
+    throw new Error("Failed to parse AI response as JSON. Please try again.");
+  }
+}
+
 chrome.commands.onCommand.addListener((command) => {
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     if (tabs[0] && tabs[0].id) {
@@ -267,6 +327,8 @@ chrome.commands.onCommand.addListener((command) => {
         chrome.tabs.sendMessage(tabs[0].id, { action: "fixGrammarShortcut" });
       } else if (command === "translate") {
         chrome.tabs.sendMessage(tabs[0].id, { action: "translateShortcut" });
+      } else if (command === "auto-fill-form") {
+        chrome.tabs.sendMessage(tabs[0].id, { action: "autoFillFormShortcut" });
       }
     }
   });

@@ -6,6 +6,7 @@ import {
   MdHourglassEmpty,
   MdAutoAwesome,
   MdReply,
+  MdDynamicForm,
 } from "react-icons/md";
 import { Readability } from "@mozilla/readability";
 
@@ -20,6 +21,7 @@ interface ButtonContainerProps {
   onTranslate: () => void;
   onEnhancePrompt: () => void;
   onAutoReply: () => void;
+  onAutoFillForm: () => void;
   loading: boolean;
 }
 
@@ -34,12 +36,14 @@ const ButtonContainer: React.FC<ButtonContainerProps> = ({
   onTranslate,
   onEnhancePrompt,
   onAutoReply,
+  onAutoFillForm,
   loading,
 }) => {
   const [hoverFix, setHoverFix] = React.useState(false);
   const [hoverTranslate, setHoverTranslate] = React.useState(false);
   const [hoverEnhance, setHoverEnhance] = React.useState(false);
   const [hoverAutoReply, setHoverAutoReply] = React.useState(false);
+  const [hoverAutoFill, setHoverAutoFill] = React.useState(false);
 
   const buttonStyle: React.CSSProperties = {
     display: "flex",
@@ -144,6 +148,21 @@ const ButtonContainer: React.FC<ButtonContainerProps> = ({
       >
         <MdAutoAwesome size={16} color="#D4AF37" />
         <span style={{ whiteSpace: "nowrap" }}>Enhance Prompt</span>
+      </button>
+      <button
+        onClick={onAutoFillForm}
+        disabled={loading}
+        onMouseEnter={() => setHoverAutoFill(true)}
+        onMouseLeave={() => setHoverAutoFill(false)}
+        style={{
+          ...buttonStyle,
+          backgroundColor: hoverAutoFill ? "#f0f0f0" : "transparent",
+          cursor: loading ? "not-allowed" : "pointer",
+          opacity: loading ? 0.6 : 1,
+        }}
+      >
+        <MdDynamicForm size={16} color="#9333EA" />
+        <span style={{ whiteSpace: "nowrap" }}>Auto Fill Form</span>
       </button>
     </div>
   );
@@ -280,6 +299,164 @@ const setElementValue = (element: EditableElement, value: string) => {
 
   element.textContent = value;
   element.dispatchEvent(new Event("input", { bubbles: true }));
+};
+
+/**
+ * Form field detection and auto-fill logic
+ */
+
+interface FormFieldInfo {
+  id: string;
+  name: string;
+  type: string;
+  label: string;
+  placeholder: string;
+  autocomplete: string;
+}
+
+interface FormFillResponse {
+  success: boolean;
+  result?: Record<string, string>;
+  error?: string;
+}
+
+const detectFormFieldType = (element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement): string => {
+  const name = (element.name || "").toLowerCase();
+  const id = (element.id || "").toLowerCase();
+  const type = element.type?.toLowerCase() || "";
+  const placeholder = ('placeholder' in element ? element.placeholder : "") || "";
+  const autocomplete = element.autocomplete?.toLowerCase() || "";
+  
+  // Check autocomplete attribute first (most reliable)
+  if (autocomplete) {
+    if (autocomplete.includes("given-name") || autocomplete.includes("first-name")) return "firstName";
+    if (autocomplete.includes("family-name") || autocomplete.includes("last-name")) return "lastName";
+    if (autocomplete.includes("name")) return "fullName";
+    if (autocomplete.includes("email")) return "email";
+    if (autocomplete.includes("tel")) return "phone";
+    if (autocomplete.includes("street-address") || autocomplete.includes("address-line")) return "address";
+    if (autocomplete.includes("postal-code") || autocomplete.includes("zip")) return "zipCode";
+    if (autocomplete.includes("address-level2") || autocomplete.includes("city")) return "city";
+    if (autocomplete.includes("address-level1") || autocomplete.includes("state")) return "state";
+    if (autocomplete.includes("country")) return "country";
+    if (autocomplete.includes("organization") || autocomplete.includes("company")) return "company";
+    if (autocomplete.includes("username")) return "username";
+    if (autocomplete.includes("bday")) return "birthdate";
+    if (autocomplete.includes("url") || autocomplete.includes("website")) return "website";
+  }
+  
+  // Check input type
+  if (type === "email") return "email";
+  if (type === "tel") return "phone";
+  if (type === "url") return "website";
+  if (type === "date") return "date";
+  if (type === "number") return "number";
+  
+  // Check name/id/placeholder patterns
+  const combined = `${name} ${id} ${placeholder}`;
+  
+  if (/first.?name|fname|given.?name/i.test(combined)) return "firstName";
+  if (/last.?name|lname|surname|family.?name/i.test(combined)) return "lastName";
+  if (/full.?name|name/i.test(combined) && !/user/i.test(combined)) return "fullName";
+  if (/e.?mail/i.test(combined)) return "email";
+  if (/phone|tel|mobile|cell/i.test(combined)) return "phone";
+  if (/address|street/i.test(combined) && !/email/i.test(combined)) return "address";
+  if (/city|town/i.test(combined)) return "city";
+  if (/state|province|region/i.test(combined)) return "state";
+  if (/zip|postal|postcode/i.test(combined)) return "zipCode";
+  if (/country/i.test(combined)) return "country";
+  if (/company|organization|org|employer/i.test(combined)) return "company";
+  if (/job|title|position|role/i.test(combined)) return "jobTitle";
+  if (/user.?name|login/i.test(combined)) return "username";
+  if (/birth|dob|birthday/i.test(combined)) return "birthdate";
+  if (/website|url|homepage/i.test(combined)) return "website";
+  if (/bio|about|description|summary/i.test(combined)) return "bio";
+  if (/message|comment|note|feedback/i.test(combined)) return "message";
+  
+  return "text";
+};
+
+const getFormFieldLabel = (element: HTMLElement): string => {
+  // Try to find associated label
+  const id = element.id;
+  if (id) {
+    const label = document.querySelector(`label[for="${id}"]`);
+    if (label) return label.textContent?.trim() || "";
+  }
+  
+  // Check for parent label
+  const parentLabel = element.closest("label");
+  if (parentLabel) {
+    // Get text content but exclude the input itself
+    const clone = parentLabel.cloneNode(true) as HTMLElement;
+    const inputs = clone.querySelectorAll("input, textarea, select");
+    inputs.forEach((input) => input.remove());
+    return clone.textContent?.trim() || "";
+  }
+  
+  // Check for nearby label-like elements
+  const parent = element.parentElement;
+  if (parent) {
+    const label = parent.querySelector("label, .label, [class*='label']");
+    if (label && label !== element) return label.textContent?.trim() || "";
+  }
+  
+  return "";
+};
+
+const getFormFields = (element: HTMLElement): FormFieldInfo[] => {
+  // Find the form that contains this element, or use the document
+  const form = element.closest("form") || document;
+  
+  const formFields: FormFieldInfo[] = [];
+  const inputs = form.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
+    'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="password"]):not([type="file"]):not([type="checkbox"]):not([type="radio"]), textarea, select'
+  );
+  
+  inputs.forEach((input, index) => {
+    // Skip if already filled
+    if (input.value && input.value.trim()) return;
+    
+    // Skip if disabled or readonly
+    if (input.disabled || ('readOnly' in input && input.readOnly)) return;
+    
+    const fieldInfo: FormFieldInfo = {
+      id: input.id || `field_${index}`,
+      name: input.name || input.id || `field_${index}`,
+      type: detectFormFieldType(input),
+      label: getFormFieldLabel(input),
+      placeholder: ('placeholder' in input ? input.placeholder : "") || "",
+      autocomplete: input.autocomplete || "",
+    };
+    
+    formFields.push(fieldInfo);
+  });
+  
+  return formFields;
+};
+
+const fillFormFields = (fields: FormFieldInfo[], values: Record<string, string>) => {
+  fields.forEach((field) => {
+    const value = values[field.name] || values[field.id];
+    if (!value) return;
+    
+    // Find the element
+    let element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null = null;
+    
+    if (field.id && field.id !== `field_${fields.indexOf(field)}`) {
+      element = document.getElementById(field.id) as any;
+    }
+    
+    if (!element && field.name) {
+      element = document.querySelector(`[name="${field.name}"]`) as any;
+    }
+    
+    if (element) {
+      element.value = value;
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+      element.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  });
 };
 
 let activeInput: EditableElement | null = null;
@@ -524,6 +701,58 @@ const InputAccessory: React.FC<{
     }
   };
 
+  const onAutoFillForm = async () => {
+    setPopoverVisible(false);
+    setLoading(true);
+
+    try {
+      const formFields = getFormFields(inputElement);
+      
+      if (formFields.length === 0) {
+        alert("No empty form fields found to fill.");
+        setLoading(false);
+        return;
+      }
+
+      const response = (await chrome.runtime.sendMessage({
+        action: "autoFillForm",
+        fields: formFields,
+      })) as unknown as FormFillResponse;
+
+      if (response && response.success && response.result) {
+        fillFormFields(formFields, response.result);
+      } else {
+        const errorMessage = response?.error || "Failed to auto fill form";
+        if (
+          errorMessage.includes("model") ||
+          errorMessage.includes("API key") ||
+          errorMessage.includes("options")
+        ) {
+          if (confirm(errorMessage + " Click OK to open settings.")) {
+            chrome.runtime.sendMessage({ action: "openOptionsPage" });
+          }
+        } else {
+          alert("Error: " + errorMessage);
+        }
+      }
+      setLoading(false);
+    } catch (error) {
+      const errorMessage = String(error);
+      if (
+        errorMessage.includes("model") ||
+        errorMessage.includes("API key") ||
+        errorMessage.includes("options")
+      ) {
+        if (confirm(errorMessage + " Click OK to open settings.")) {
+          chrome.runtime.sendMessage({ action: "openOptionsPage" });
+        }
+      } else {
+        alert("Error: " + errorMessage);
+      }
+      setLoading(false);
+    }
+  };
+
   return (
     <div
       ref={accessoryRef}
@@ -561,6 +790,7 @@ const InputAccessory: React.FC<{
             onTranslate={onTranslate}
             onEnhancePrompt={onEnhancePrompt}
             onAutoReply={onAutoReply}
+            onAutoFillForm={onAutoFillForm}
             loading={loading}
           />
         </div>
@@ -1006,6 +1236,64 @@ const handleShortcut = async (action: "fixGrammar" | "translate") => {
   }
 };
 
+const handleAutoFillFormShortcut = async () => {
+  const element = activeInput || document.activeElement;
+  if (!element || !(element instanceof HTMLElement)) return;
+
+  const formFields = getFormFields(element);
+  
+  if (formFields.length === 0) {
+    alert("No empty form fields found to fill.");
+    return;
+  }
+
+  // Dispatch loading event if we have an active input
+  if (activeInput) {
+    activeInput.dispatchEvent(new Event("ainput-loading-start"));
+  }
+
+  try {
+    const response = (await chrome.runtime.sendMessage({
+      action: "autoFillForm",
+      fields: formFields,
+    })) as unknown as FormFillResponse;
+
+    if (response && response.success && response.result) {
+      fillFormFields(formFields, response.result);
+    } else {
+      const errorMessage = response?.error || "Failed to auto fill form";
+      if (
+        errorMessage.includes("model") ||
+        errorMessage.includes("API key") ||
+        errorMessage.includes("options")
+      ) {
+        if (confirm(errorMessage + " Click OK to open settings.")) {
+          chrome.runtime.sendMessage({ action: "openOptionsPage" });
+        }
+      } else {
+        alert("Error: " + errorMessage);
+      }
+    }
+  } catch (error) {
+    const errorMessage = String(error);
+    if (
+      errorMessage.includes("model") ||
+      errorMessage.includes("API key") ||
+      errorMessage.includes("options")
+    ) {
+      if (confirm(errorMessage + " Click OK to open settings.")) {
+        chrome.runtime.sendMessage({ action: "openOptionsPage" });
+      }
+    } else {
+      alert("Error: " + errorMessage);
+    }
+  } finally {
+    if (activeInput) {
+      activeInput.dispatchEvent(new Event("ainput-loading-end"));
+    }
+  }
+};
+
 chrome.runtime.onMessage.addListener((message) => {
   if (
     message.action === "fixGrammarShortcut" ||
@@ -1014,5 +1302,7 @@ chrome.runtime.onMessage.addListener((message) => {
     const action =
       message.action === "fixGrammarShortcut" ? "fixGrammar" : "translate";
     handleShortcut(action);
+  } else if (message.action === "autoFillFormShortcut") {
+    handleAutoFillFormShortcut();
   }
 });

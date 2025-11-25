@@ -33,6 +33,13 @@
         "mac": "Command+Shift+T"
       },
       "description": "Translate selected text"
+    },
+    "auto-fill-form": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+A",
+        "mac": "Command+Shift+A"
+      },
+      "description": "Auto-fill form with AI generated data"
     }
   },
 
