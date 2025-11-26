@@ -15,7 +15,7 @@ import {
   getRedditEditorRoot,
   getElementValue,
   setElementValue,
-} from "./siteExceptions";
+} from "./site-exceptions";
 
 declare global {
   interface Window {
