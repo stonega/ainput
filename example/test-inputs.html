@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AInput - Test Page</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+      min-height: 100vh;
+      padding: 40px 20px;
+      color: #333333;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 50px;
+    }
+
+    h1 {
+      font-size: 2.8rem;
+      font-weight: 700;
+      background: linear-gradient(90deg, #00B1F2, #62109F, #41A67E);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 12px;
+    }
+
+    .subtitle {
+      color: #555555;
+      font-size: 1.1rem;
+    }
+
+    .section {
+      background: #ffffff;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+      border-radius: 16px;
+      padding: 30px;
+      margin-bottom: 30px;
+      border: 1px solid #e2e8f0;
+    }
+
+    .section-title {
+      font-size: 1.4rem;
+      font-weight: 600;
+      color: #2d3748;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .section-title::before {
+      content: '';
+      width: 4px;
+      height: 24px;
+      background: linear-gradient(180deg, #00B1F2, #62109F);
+      border-radius: 2px;
+    }
+
+    .input-group {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: #4a5568;
+      margin-bottom: 8px;
+    }
+
+    .input-type-badge {
+      display: inline-block;
+      background: rgba(98, 16, 159, 0.1);
+      color: #62109f;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-family: monospace;
+      margin-left: 8px;
+      border: 1px solid rgba(98, 16, 159, 0.2);
+    }
+
+    input[type="text"],
+    input[type="email"],
+    input[type="search"],
+    input[type="tel"],
+    input[type="url"],
+    input[type="date"],
+    input[type="number"],
+    textarea,
+    select {
+      width: 100%;
+      padding: 14px 16px;
+      font-size: 1rem;
+      font-family: inherit;
+      background: #f7fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      color: #1a202c;
+      transition: all 0.2s ease;
+    }
+
+    input:focus,
+    textarea:focus,
+    select:focus,
+    .contenteditable:focus {
+      outline: none;
+      border-color: #00B1F2;
+      background: #ffffff;
+      box-shadow: 0 0 0 3px rgba(0, 177, 242, 0.2);
+    }
+
+    input::placeholder,
+    textarea::placeholder {
+      color: #a0aec0;
+    }
+
+    textarea {
+      min-height: 120px;
+      resize: vertical;
+    }
+
+    select {
+      cursor: pointer;
+    }
+
+    select option {
+      background: #ffffff;
+      color: #1a202c;
+    }
+
+    .contenteditable {
+      width: 100%;
+      min-height: 120px;
+      padding: 14px 16px;
+      font-size: 1rem;
+      background: #f7fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      color: #1a202c;
+      transition: all 0.2s ease;
+    }
+
+    .contenteditable:empty::before {
+      content: attr(data-placeholder);
+      color: #a0aec0;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+    }
+
+    @media (max-width: 600px) {
+      .grid-2 {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .hint {
+      font-size: 0.8rem;
+      color: #718096;
+      margin-top: 6px;
+    }
+
+    .feature-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    .feature-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(65, 166, 126, 0.1);
+      border: 1px solid rgba(65, 166, 126, 0.3);
+      padding: 8px 14px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      color: #276749;
+    }
+
+    .feature-item .icon {
+      font-size: 1rem;
+    }
+
+    footer {
+      text-align: center;
+      margin-top: 40px;
+      color: #718096;
+      font-size: 0.9rem;
+    }
+
+    footer a {
+      color: #00B1F2;
+      text-decoration: none;
+    }
+
+    footer a:hover {
+      text-decoration: underline;
+    }
+
+    .instructions {
+      background: #ebf8ff;
+      border: 1px solid #bee3f8;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 30px;
+    }
+
+    .instructions h3 {
+      color: #2b6cb0;
+      margin-bottom: 12px;
+      font-size: 1rem;
+    }
+
+    .instructions ol {
+      margin-left: 20px;
+      line-height: 1.8;
+      color: #4a5568;
+    }
+
+    .instructions li {
+      margin-bottom: 4px;
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      background: #00B1F2;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="instructions">
+      <h3>How to Test</h3>
+      <ol>
+        <li>Click/focus on any input field below</li>
+        <li>Look for the <span class="dot"></span> blue indicator next to your cursor</li>
+        <li>Click the blue dot to see available AI actions</li>
+        <li>Try typing some text and using "Fix Grammar", "Translate", or other features</li>
+      </ol>
+    </div>
+
+    <section class="section">
+      <h2 class="section-title">Basic Text Inputs</h2>
+      
+      <div class="grid-2">
+        <div class="input-group">
+          <label for="text-input">
+            Text Input
+            <span class="input-type-badge">type="text"</span>
+          </label>
+          <input type="text" id="text-input" placeholder="Type some text to fix grammar..." value="I has went to the store yesterday and buyed alot of stuffs.">
+        </div>
+
+        <div class="input-group">
+          <label for="search-input">
+            Search Input
+            <span class="input-type-badge">type="search"</span>
+          </label>
+          <input type="search" id="search-input" placeholder="Search query to enhance..." value="今天天气很好，我想出去散步。你有什么好的建议吗？">
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2 class="section-title">Contact Inputs</h2>
+      
+      <div class="grid-2">
+        <div class="input-group">
+          <label for="email-input">
+            Email Input
+            <span class="input-type-badge">type="email"</span>
+          </label>
+          <input type="email" id="email-input" placeholder="your@email.com" autocomplete="email" value="me want send email to freinds">
+        </div>
+
+        <div class="input-group">
+          <label for="tel-input">
+            Phone Input
+            <span class="input-type-badge">type="tel"</span>
+          </label>
+          <input type="tel" id="tel-input" placeholder="+1 (555) 123-4567" autocomplete="tel">
+        </div>
+
+        <div class="input-group">
+          <label for="url-input">
+            URL Input
+            <span class="input-type-badge">type="url"</span>
+          </label>
+          <input type="url" id="url-input" placeholder="https://example.com" autocomplete="url" value="check out this awsome website I maked">
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2 class="section-title">Textarea</h2>
+      
+      <div class="input-group">
+        <label for="textarea-main">
+          Multi-line Text
+          <span class="input-type-badge">&lt;textarea&gt;</span>
+        </label>
+        <textarea id="textarea-main" placeholder="Write a longer message here...">Their going to the party tonite but me and him doesnt want to go because we has alot of homeworks to do. The weater is very beautifull today and I thinked about going outside but my freind say its gonna rain later so we stay home insteed. Yesterday I readed a intresting articel about artifical inteligence and how it will effects our lifes in the futur.</textarea>
+        <p class="hint">Great for emails, messages, and longer content</p>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2 class="section-title">ContentEditable (Rich Text)</h2>
+      
+      <div class="input-group">
+        <label>
+          ContentEditable Div
+          <span class="input-type-badge">contenteditable="true"</span>
+        </label>
+        <div 
+          class="contenteditable" 
+          contenteditable="true" 
+          data-placeholder="This is a rich text editor area...">I want to wrote a tweet about my new project but I dont no how to make it sound profesional. The app I builded is realy cool and helps peoples with there daily tasks. Can you helped me make this more better?</div>
+        <p class="hint">Simulates rich text editors used by X, Reddit, and other platforms</p>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2 class="section-title">Form Auto-Fill Test</h2>
+      <p class="hint" style="margin-bottom: 20px;">Test the "Auto Fill Form" feature - it detects field types and fills them with AI-generated data</p>
+      
+      <form id="contact-form">
+        <div class="grid-2">
+          <div class="input-group">
+            <label for="first-name">
+              First Name
+              <span class="input-type-badge">autocomplete="given-name"</span>
+            </label>
+            <input type="text" id="first-name" name="firstName" autocomplete="given-name" placeholder="John">
+          </div>
+
+          <div class="input-group">
+            <label for="last-name">
+              Last Name
+              <span class="input-type-badge">autocomplete="family-name"</span>
+            </label>
+            <input type="text" id="last-name" name="lastName" autocomplete="family-name" placeholder="Doe">
+          </div>
+
+          <div class="input-group">
+            <label for="form-email">
+              Email
+              <span class="input-type-badge">autocomplete="email"</span>
+            </label>
+            <input type="email" id="form-email" name="email" autocomplete="email" placeholder="john@example.com">
+          </div>
+
+          <div class="input-group">
+            <label for="form-phone">
+              Phone
+              <span class="input-type-badge">autocomplete="tel"</span>
+            </label>
+            <input type="tel" id="form-phone" name="phone" autocomplete="tel" placeholder="+1 555 123 4567">
+          </div>
+
+          <div class="input-group">
+            <label for="company">
+              Company
+              <span class="input-type-badge">autocomplete="organization"</span>
+            </label>
+            <input type="text" id="company" name="company" autocomplete="organization" placeholder="Acme Inc.">
+          </div>
+
+          <div class="input-group">
+            <label for="job-title">
+              Job Title
+              <span class="input-type-badge">name="jobTitle"</span>
+            </label>
+            <input type="text" id="job-title" name="jobTitle" placeholder="Software Engineer">
+          </div>
+
+          <div class="input-group">
+            <label for="address">
+              Street Address
+              <span class="input-type-badge">autocomplete="street-address"</span>
+            </label>
+            <input type="text" id="address" name="address" autocomplete="street-address" placeholder="123 Main St">
+          </div>
+
+          <div class="input-group">
+            <label for="city">
+              City
+              <span class="input-type-badge">autocomplete="address-level2"</span>
+            </label>
+            <input type="text" id="city" name="city" autocomplete="address-level2" placeholder="San Francisco">
+          </div>
+
+          <div class="input-group">
+            <label for="state">
+              State
+              <span class="input-type-badge">autocomplete="address-level1"</span>
+            </label>
+            <input type="text" id="state" name="state" autocomplete="address-level1" placeholder="CA">
+          </div>
+
+          <div class="input-group">
+            <label for="zip">
+              ZIP Code
+              <span class="input-type-badge">autocomplete="postal-code"</span>
+            </label>
+            <input type="text" id="zip" name="zipCode" autocomplete="postal-code" placeholder="94102">
+          </div>
+
+          <div class="input-group">
+            <label for="country">
+              Country
+              <span class="input-type-badge">&lt;select&gt;</span>
+            </label>
+            <select id="country" name="country" autocomplete="country">
+              <option value="">Select a country...</option>
+              <option value="US">United States</option>
+              <option value="CA">Canada</option>
+              <option value="UK">United Kingdom</option>
+              <option value="DE">Germany</option>
+              <option value="FR">France</option>
+              <option value="JP">Japan</option>
+              <option value="AU">Australia</option>
+            </select>
+          </div>
+
+          <div class="input-group">
+            <label for="website">
+              Website
+              <span class="input-type-badge">autocomplete="url"</span>
+            </label>
+            <input type="url" id="website" name="website" autocomplete="url" placeholder="https://yoursite.com">
+          </div>
+        </div>
+
+        <div class="input-group" style="margin-top: 10px;">
+          <label for="bio">
+            Bio / About
+            <span class="input-type-badge">name="bio"</span>
+          </label>
+          <textarea id="bio" name="bio" placeholder="Tell us about yourself...">I am a sofware devloper with 5 year of experiance. I has worked on many projekts and I am very pasionate about tecnology. My skill includes programing, problem solving, and teamwork.</textarea>
+        </div>
+
+        <div class="input-group">
+          <label for="message">
+            Message
+            <span class="input-type-badge">name="message"</span>
+          </label>
+          <textarea id="message" name="message" placeholder="Your message here...">Hello, I am writting to ask about you're product. I seen it on the internet and I thinks it look very intresting. Can you tells me more informations about how it work and what is the price? Thank you for you're time.</textarea>
+        </div>
+      </form>
+    </section>
+
+    <section class="section">
+      <h2 class="section-title">Available Features</h2>
+      <div class="feature-list">
+        <div class="feature-item">
+          <span class="icon">✨</span>
+          Fix Grammar
+        </div>
+        <div class="feature-item">
+          <span class="icon">🌐</span>
+          Translate
+        </div>
+        <div class="feature-item">
+          <span class="icon">💬</span>
+          Auto Reply
+        </div>
+        <div class="feature-item">
+          <span class="icon">🚀</span>
+          Enhance Prompt
+        </div>
+        <div class="feature-item">
+          <span class="icon">📝</span>
+          Auto Fill Form
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <p>AInput Chrome Extension Test Page</p>
+      <p>Make sure the extension is installed and configured with an API key in the options.</p>
+    </footer>
+  </div>
+</body>
+</html>
+

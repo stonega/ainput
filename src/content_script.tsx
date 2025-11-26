@@ -30,6 +30,7 @@ interface ButtonContainerProps {
   onAutoReply: () => void;
   onAutoFillForm: () => void;
   loading: boolean;
+  isInForm: boolean;
 }
 
 interface MessageResponse {
@@ -98,6 +99,7 @@ const ButtonContainer: React.FC<ButtonContainerProps> = ({
   onAutoReply,
   onAutoFillForm,
   loading,
+  isInForm,
 }) => {
   const [hoverFix, setHoverFix] = React.useState(false);
   const [hoverTranslate, setHoverTranslate] = React.useState(false);
@@ -110,7 +112,7 @@ const ButtonContainer: React.FC<ButtonContainerProps> = ({
     alignItems: "center",
     gap: "4px",
     padding: "8px 12px",
-    border: 'none',
+    border: "none",
     backgroundColor: "transparent",
     color: "#333",
     borderRadius: "8px",
@@ -209,21 +211,23 @@ const ButtonContainer: React.FC<ButtonContainerProps> = ({
         <MdAutoAwesome size={16} color="#D4AF37" />
         <span style={{ whiteSpace: "nowrap" }}>Enhance Prompt</span>
       </button>
-      <button
-        onClick={onAutoFillForm}
-        disabled={loading}
-        onMouseEnter={() => setHoverAutoFill(true)}
-        onMouseLeave={() => setHoverAutoFill(false)}
-        style={{
-          ...buttonStyle,
-          backgroundColor: hoverAutoFill ? "#f0f0f0" : "transparent",
-          cursor: loading ? "not-allowed" : "pointer",
-          opacity: loading ? 0.6 : 1,
-        }}
-      >
-        <MdDynamicForm size={16} color="#9333EA" />
-        <span style={{ whiteSpace: "nowrap" }}>Auto Fill Form</span>
-      </button>
+      {isInForm && (
+        <button
+          onClick={onAutoFillForm}
+          disabled={loading}
+          onMouseEnter={() => setHoverAutoFill(true)}
+          onMouseLeave={() => setHoverAutoFill(false)}
+          style={{
+            ...buttonStyle,
+            backgroundColor: hoverAutoFill ? "#f0f0f0" : "transparent",
+            cursor: loading ? "not-allowed" : "pointer",
+            opacity: loading ? 0.6 : 1,
+          }}
+        >
+          <MdDynamicForm size={16} color="#9333EA" />
+          <span style={{ whiteSpace: "nowrap" }}>Auto Fill Form</span>
+        </button>
+      )}
     </div>
   );
 };
@@ -247,47 +251,79 @@ interface FormFillResponse {
   error?: string;
 }
 
-const detectFormFieldType = (element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement): string => {
+const detectFormFieldType = (
+  element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+): string => {
   const name = (element.name || "").toLowerCase();
   const id = (element.id || "").toLowerCase();
   const type = element.type?.toLowerCase() || "";
-  const placeholder = ('placeholder' in element ? element.placeholder : "") || "";
+  const placeholder =
+    ("placeholder" in element ? element.placeholder : "") || "";
   const autocomplete = element.autocomplete?.toLowerCase() || "";
-  
+
   // Check autocomplete attribute first (most reliable)
   if (autocomplete) {
-    if (autocomplete.includes("given-name") || autocomplete.includes("first-name")) return "firstName";
-    if (autocomplete.includes("family-name") || autocomplete.includes("last-name")) return "lastName";
+    if (
+      autocomplete.includes("given-name") ||
+      autocomplete.includes("first-name")
+    )
+      return "firstName";
+    if (
+      autocomplete.includes("family-name") ||
+      autocomplete.includes("last-name")
+    )
+      return "lastName";
     if (autocomplete.includes("name")) return "fullName";
     if (autocomplete.includes("email")) return "email";
     if (autocomplete.includes("tel")) return "phone";
-    if (autocomplete.includes("street-address") || autocomplete.includes("address-line")) return "address";
-    if (autocomplete.includes("postal-code") || autocomplete.includes("zip")) return "zipCode";
-    if (autocomplete.includes("address-level2") || autocomplete.includes("city")) return "city";
-    if (autocomplete.includes("address-level1") || autocomplete.includes("state")) return "state";
+    if (
+      autocomplete.includes("street-address") ||
+      autocomplete.includes("address-line")
+    )
+      return "address";
+    if (autocomplete.includes("postal-code") || autocomplete.includes("zip"))
+      return "zipCode";
+    if (
+      autocomplete.includes("address-level2") ||
+      autocomplete.includes("city")
+    )
+      return "city";
+    if (
+      autocomplete.includes("address-level1") ||
+      autocomplete.includes("state")
+    )
+      return "state";
     if (autocomplete.includes("country")) return "country";
-    if (autocomplete.includes("organization") || autocomplete.includes("company")) return "company";
+    if (
+      autocomplete.includes("organization") ||
+      autocomplete.includes("company")
+    )
+      return "company";
     if (autocomplete.includes("username")) return "username";
     if (autocomplete.includes("bday")) return "birthdate";
-    if (autocomplete.includes("url") || autocomplete.includes("website")) return "website";
+    if (autocomplete.includes("url") || autocomplete.includes("website"))
+      return "website";
   }
-  
+
   // Check input type
   if (type === "email") return "email";
   if (type === "tel") return "phone";
   if (type === "url") return "website";
   if (type === "date") return "date";
   if (type === "number") return "number";
-  
+
   // Check name/id/placeholder patterns
   const combined = `${name} ${id} ${placeholder}`;
-  
+
   if (/first.?name|fname|given.?name/i.test(combined)) return "firstName";
-  if (/last.?name|lname|surname|family.?name/i.test(combined)) return "lastName";
-  if (/full.?name|name/i.test(combined) && !/user/i.test(combined)) return "fullName";
+  if (/last.?name|lname|surname|family.?name/i.test(combined))
+    return "lastName";
+  if (/full.?name|name/i.test(combined) && !/user/i.test(combined))
+    return "fullName";
   if (/e.?mail/i.test(combined)) return "email";
   if (/phone|tel|mobile|cell/i.test(combined)) return "phone";
-  if (/address|street/i.test(combined) && !/email/i.test(combined)) return "address";
+  if (/address|street/i.test(combined) && !/email/i.test(combined))
+    return "address";
   if (/city|town/i.test(combined)) return "city";
   if (/state|province|region/i.test(combined)) return "state";
   if (/zip|postal|postcode/i.test(combined)) return "zipCode";
@@ -299,7 +335,7 @@ const detectFormFieldType = (element: HTMLInputElement | HTMLTextAreaElement | H
   if (/website|url|homepage/i.test(combined)) return "website";
   if (/bio|about|description|summary/i.test(combined)) return "bio";
   if (/message|comment|note|feedback/i.test(combined)) return "message";
-  
+
   return "text";
 };
 
@@ -310,7 +346,7 @@ const getFormFieldLabel = (element: HTMLElement): string => {
     const label = document.querySelector(`label[for="${id}"]`);
     if (label) return label.textContent?.trim() || "";
   }
-  
+
   // Check for parent label
   const parentLabel = element.closest("label");
   if (parentLabel) {
@@ -320,64 +356,73 @@ const getFormFieldLabel = (element: HTMLElement): string => {
     inputs.forEach((input) => input.remove());
     return clone.textContent?.trim() || "";
   }
-  
+
   // Check for nearby label-like elements
   const parent = element.parentElement;
   if (parent) {
     const label = parent.querySelector("label, .label, [class*='label']");
     if (label && label !== element) return label.textContent?.trim() || "";
   }
-  
+
   return "";
 };
 
 const getFormFields = (element: HTMLElement): FormFieldInfo[] => {
   // Find the form that contains this element, or use the document
   const form = element.closest("form") || document;
-  
+
   const formFields: FormFieldInfo[] = [];
-  const inputs = form.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
+  const inputs = form.querySelectorAll<
+    HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+  >(
     'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="password"]):not([type="file"]):not([type="checkbox"]):not([type="radio"]), textarea, select'
   );
-  
+
   inputs.forEach((input, index) => {
     // Skip if already filled
     if (input.value && input.value.trim()) return;
-    
+
     // Skip if disabled or readonly
-    if (input.disabled || ('readOnly' in input && input.readOnly)) return;
-    
+    if (input.disabled || ("readOnly" in input && input.readOnly)) return;
+
     const fieldInfo: FormFieldInfo = {
       id: input.id || `field_${index}`,
       name: input.name || input.id || `field_${index}`,
       type: detectFormFieldType(input),
       label: getFormFieldLabel(input),
-      placeholder: ('placeholder' in input ? input.placeholder : "") || "",
+      placeholder: ("placeholder" in input ? input.placeholder : "") || "",
       autocomplete: input.autocomplete || "",
     };
-    
+
     formFields.push(fieldInfo);
   });
-  
+
   return formFields;
 };
 
-const fillFormFields = (fields: FormFieldInfo[], values: Record<string, string>) => {
+const fillFormFields = (
+  fields: FormFieldInfo[],
+  values: Record<string, string>
+) => {
   fields.forEach((field) => {
     const value = values[field.name] || values[field.id];
     if (!value) return;
-    
+
     // Find the element
-    let element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null = null;
-    
+    let element:
+      | HTMLInputElement
+      | HTMLTextAreaElement
+      | HTMLSelectElement
+      | null = null;
+
     if (field.id && field.id !== `field_${fields.indexOf(field)}`) {
       element = document.getElementById(field.id) as any;
     }
-    
+
     if (!element && field.name) {
       element = document.querySelector(`[name="${field.name}"]`) as any;
     }
-    
+
     if (element) {
       element.value = value;
       element.dispatchEvent(new Event("input", { bubbles: true }));
@@ -399,6 +444,9 @@ const InputAccessory: React.FC<{
   const accessoryRef = React.useRef<HTMLDivElement>(null);
   const popoverRef = React.useRef<HTMLDivElement>(null);
   const [popoverTop, setPopoverTop] = React.useState("16px");
+
+  // Check if the input element is inside a form
+  const isInForm = !!inputElement.closest("form");
 
   React.useEffect(() => {
     const handleLoadingStart = () => setLoading(true);
@@ -523,7 +571,7 @@ const InputAccessory: React.FC<{
 
     setPopoverVisible(false);
     setLoading(true);
-    
+
     // Clear the element and prepare for streaming
     setElementValue(element, "");
     let streamedText = "";
@@ -612,7 +660,7 @@ const InputAccessory: React.FC<{
 
     try {
       const formFields = getFormFields(inputElement);
-      
+
       if (formFields.length === 0) {
         alert("No empty form fields found to fill.");
         setLoading(false);
@@ -697,6 +745,7 @@ const InputAccessory: React.FC<{
             onAutoReply={onAutoReply}
             onAutoFillForm={onAutoFillForm}
             loading={loading}
+            isInForm={isInForm}
           />
         </div>
       )}
@@ -773,10 +822,7 @@ function getCaretCoordinates(element: EditableElement, position: number) {
   }
 
   const span = document.createElement("span");
-  span.textContent =
-    getElementValue(element).substring(
-      position
-    ) || ".";
+  span.textContent = getElementValue(element).substring(position) || ".";
   div.appendChild(span);
 
   const coordinates = {
@@ -917,13 +963,7 @@ document.addEventListener(
       const isEditable =
         target.tagName.toLowerCase() === "textarea" ||
         (target instanceof HTMLInputElement &&
-          [
-            "text",
-            "email",
-            "search",
-            "tel",
-            "url",
-          ].includes(target.type)) ||
+          ["text", "email", "search", "tel", "url"].includes(target.type)) ||
         (target.isContentEditable &&
           target.tagName.toLowerCase().includes("div"));
 
@@ -934,7 +974,7 @@ document.addEventListener(
           const article = new Readability(documentClone).parse();
           const pageContent = article?.textContent?.slice(0, 4000) || "";
           target.dispatchEvent(new Event("ainput-loading-start"));
-          
+
           // Use streaming for auto-reply on focus
           let streamedText = "";
           streamRequest(
@@ -1076,7 +1116,7 @@ const handleShortcut = (action: "fixGrammar" | "translate") => {
   }
 
   element.dispatchEvent(new Event("ainput-loading-start"));
-  
+
   // Store original values for potential restoration and streaming replacement
   const originalValue = isInputElement ? element.value : "";
   let streamedText = "";
@@ -1140,7 +1180,7 @@ const handleAutoFillFormShortcut = async () => {
   if (!element || !(element instanceof HTMLElement)) return;
 
   const formFields = getFormFields(element);
-  
+
   if (formFields.length === 0) {
     alert("No empty form fields found to fill.");
     return;

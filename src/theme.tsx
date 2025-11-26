@@ -135,4 +135,3 @@ export const GlobalStyles = ({ extraCss = "" }: { extraCss?: string }) => (
     `}
   </style>
 );
-

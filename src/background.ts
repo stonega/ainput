@@ -77,7 +77,9 @@ async function streamGeminiAPI(
     if (errorData.error?.message?.toLowerCase().includes("quota")) {
       throw new Error("You have exceeded your Gemini API quota.");
     }
-    throw new Error(errorData.error?.message || `API request failed: ${response.statusText}`);
+    throw new Error(
+      errorData.error?.message || `API request failed: ${response.statusText}`
+    );
   }
 
   const reader = response.body?.getReader();
@@ -179,7 +181,9 @@ async function streamOpenAIAPI(
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error?.message || `API request failed: ${response.statusText}`);
+    throw new Error(
+      errorData.error?.message || `API request failed: ${response.statusText}`
+    );
   }
 
   const reader = response.body?.getReader();
@@ -225,7 +229,8 @@ async function streamOpenAIAPI(
   }
 
   // Estimate token usage for streaming (rough estimate: ~4 chars per token)
-  estimatedTokens = Math.ceil(fullText.length / 4) + Math.ceil(prompt.length / 4);
+  estimatedTokens =
+    Math.ceil(fullText.length / 4) + Math.ceil(prompt.length / 4);
   addTokenUsage({
     date: new Date().toISOString(),
     model: model,
@@ -404,7 +409,13 @@ async function streamApi(
     throw new Error("Please select an active model in the extension options.");
   } else if (settings.apiKey) {
     // Legacy support for old settings
-    return streamGeminiAPI(prompt, settings.apiKey, "gemini-2.5-flash", "legacy", onChunk);
+    return streamGeminiAPI(
+      prompt,
+      settings.apiKey,
+      "gemini-2.5-flash",
+      "legacy",
+      onChunk
+    );
   } else {
     throw new Error(
       "No API key or model configured. Please set your API key in the extension options."
@@ -429,7 +440,12 @@ async function callApi(prompt: string, kind: string): Promise<string> {
     }
 
     if (activeModel.type === "gemini") {
-      return callGeminiAPI(prompt, activeModel.apiKey, activeModel.model || "gemini-2.5-flash", kind);
+      return callGeminiAPI(
+        prompt,
+        activeModel.apiKey,
+        activeModel.model || "gemini-2.5-flash",
+        kind
+      );
     } else if (
       activeModel.type === "openai" ||
       activeModel.type === "openrouter" ||
@@ -518,7 +534,7 @@ chrome.runtime.onConnect.addListener((port) => {
           break;
         case "translate": {
           const settings = await chrome.storage.sync.get(["targetLanguage"]);
-          const targetLanguage = settings.targetLanguage || "Spanish";
+          const targetLanguage = settings.targetLanguage || "English";
           prompt = `Translate the following text to ${targetLanguage}. Return ONLY the translated text without any explanations or additional comments:\n\n${text}`;
           kind = "translate";
           break;
@@ -532,7 +548,10 @@ chrome.runtime.onConnect.addListener((port) => {
           kind = "autoReply";
           break;
         default:
-          port.postMessage({ type: "error", error: `Unknown action: ${action}` });
+          port.postMessage({
+            type: "error",
+            error: `Unknown action: ${action}`,
+          });
           return;
       }
 
@@ -544,9 +563,9 @@ chrome.runtime.onConnect.addListener((port) => {
         }
       });
     } catch (error) {
-      port.postMessage({ 
-        type: "error", 
-        error: error instanceof Error ? error.message : String(error) 
+      port.postMessage({
+        type: "error",
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   });
@@ -562,7 +581,7 @@ async function handleTranslate(text: string): Promise<string> {
   // Get API key and target language from storage
   const settings = await chrome.storage.sync.get(["targetLanguage"]);
 
-  const targetLanguage = settings.targetLanguage || "Spanish";
+  const targetLanguage = settings.targetLanguage || "English";
 
   const prompt = `Translate the following text to ${targetLanguage}. Return ONLY the translated text without any explanations or additional comments:\n\n${text}`;
 
@@ -590,14 +609,19 @@ interface FormFieldInfo {
   autocomplete: string;
 }
 
-async function handleAutoFillForm(fields: FormFieldInfo[]): Promise<Record<string, string>> {
-  const fieldDescriptions = fields.map((field) => {
-    const details = [];
-    if (field.label) details.push(`label: "${field.label}"`);
-    if (field.placeholder) details.push(`placeholder: "${field.placeholder}"`);
-    details.push(`detected type: ${field.type}`);
-    return `- "${field.name}" (${details.join(", ")})`;
-  }).join("\n");
+async function handleAutoFillForm(
+  fields: FormFieldInfo[]
+): Promise<Record<string, string>> {
+  const fieldDescriptions = fields
+    .map((field) => {
+      const details = [];
+      if (field.label) details.push(`label: "${field.label}"`);
+      if (field.placeholder)
+        details.push(`placeholder: "${field.placeholder}"`);
+      details.push(`detected type: ${field.type}`);
+      return `- "${field.name}" (${details.join(", ")})`;
+    })
+    .join("\n");
 
   const prompt = `Generate realistic data for a web form. The data should look completely authentic and natural, as if from a real person.
 
@@ -623,7 +647,7 @@ Example output format:
 Generate the JSON:`;
 
   const result = await callApi(prompt, "autoFillForm");
-  
+
   // Parse the JSON response
   try {
     // Try to extract JSON from the response (in case there's extra text)

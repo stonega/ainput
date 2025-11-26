@@ -9,7 +9,8 @@
     "clean": "rimraf dist",
     "test": "npx jest",
     "style": "prettier --write \"src/**/*.{ts,tsx}\"",
-    "pack": "bestzip dist.zip dist/*"
+    "pack": "bestzip dist.zip dist/*",
+    "example": "npx serve example -p 3000"
   },
   "author": "Stone",
   "license": "MIT",

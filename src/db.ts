@@ -12,7 +12,7 @@ interface UsageDB extends DBSchema {
   tokenUsage: {
     key: number;
     value: TokenUsage;
-    indexes: { "date": string };
+    indexes: { date: string };
   };
 }
 
@@ -51,7 +51,6 @@ export async function getTokenUsage(
   if (page > 1 && cursor) {
     await cursor.advance((page - 1) * pageSize);
   }
-
 
   const data: TokenUsage[] = [];
   let count = 0;

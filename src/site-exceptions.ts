@@ -9,7 +9,10 @@
  * - Reddit - Lexical rich text editor
  */
 
-export type EditableElement = HTMLInputElement | HTMLTextAreaElement | HTMLElement;
+export type EditableElement =
+  | HTMLInputElement
+  | HTMLTextAreaElement
+  | HTMLElement;
 
 /**
  * Site handler interface for implementing site-specific logic
@@ -195,7 +198,10 @@ export const getElementValue = (element: EditableElement): string => {
 /**
  * Set the value for an editable element, handling site-specific editors
  */
-export const setElementValue = (element: EditableElement, value: string): void => {
+export const setElementValue = (
+  element: EditableElement,
+  value: string
+): void => {
   // Handle standard input/textarea elements
   if ("value" in element) {
     (element as HTMLInputElement).value = value;

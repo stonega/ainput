@@ -111,6 +111,7 @@ The AI automatically detects field types based on field names, labels, placehold
 
 ## Supported Languages for Translation
 
+- English
 - Spanish
 - French
 - German

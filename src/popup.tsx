@@ -1,7 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { IoSettingsOutline } from "react-icons/io5";
-import { FaPowerOff, FaRobot, FaExternalLinkAlt, FaExclamationCircle } from "react-icons/fa";
+import {
+  FaPowerOff,
+  FaRobot,
+  FaExternalLinkAlt,
+  FaExclamationCircle,
+} from "react-icons/fa";
 import { theme, GlobalStyles } from "./theme";
 
 // --- Components ---
@@ -21,10 +26,10 @@ const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
   enabled,
   onToggle,
   disabled = false,
-  icon
+  icon,
 }) => {
   return (
-    <div 
+    <div
       className="hover-bg"
       onClick={disabled ? undefined : onToggle}
       style={{
@@ -36,49 +41,71 @@ const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
         opacity: disabled ? 0.6 : 1,
         borderRadius: theme.borderRadius.md,
         transition: "background-color 0.2s",
-        marginBottom: "8px"
+        marginBottom: "8px",
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
         {icon && (
-          <div style={{ 
-            color: enabled ? theme.colors.primary : theme.colors.textSecondary,
-            fontSize: "18px",
-            display: "flex"
-          }}>
+          <div
+            style={{
+              color: enabled
+                ? theme.colors.primary
+                : theme.colors.textSecondary,
+              fontSize: "18px",
+              display: "flex",
+            }}
+          >
             {icon}
           </div>
         )}
         <div>
-          <div style={{ fontSize: "14px", fontWeight: 600, color: theme.colors.text }}>{label}</div>
+          <div
+            style={{
+              fontSize: "14px",
+              fontWeight: 600,
+              color: theme.colors.text,
+            }}
+          >
+            {label}
+          </div>
           {sublabel && (
-            <div style={{ fontSize: "11px", color: theme.colors.textSecondary, marginTop: "2px" }}>
+            <div
+              style={{
+                fontSize: "11px",
+                color: theme.colors.textSecondary,
+                marginTop: "2px",
+              }}
+            >
               {sublabel}
             </div>
           )}
         </div>
       </div>
-      
-      <div style={{
-        position: "relative",
-        width: "44px",
-        height: "24px",
-        backgroundColor: enabled ? theme.colors.primary : "#cbd5e1",
-        borderRadius: "99px",
-        transition: "background-color 0.2s ease-in-out",
-        flexShrink: 0
-      }}>
-        <div style={{
-          position: "absolute",
-          top: "2px",
-          left: enabled ? "22px" : "2px",
-          width: "20px",
-          height: "20px",
-          backgroundColor: "white",
-          borderRadius: "50%",
-          transition: "left 0.2s ease-in-out",
-          boxShadow: "0 1px 2px rgba(0,0,0,0.2)",
-        }} />
+
+      <div
+        style={{
+          position: "relative",
+          width: "44px",
+          height: "24px",
+          backgroundColor: enabled ? theme.colors.primary : "#cbd5e1",
+          borderRadius: "99px",
+          transition: "background-color 0.2s ease-in-out",
+          flexShrink: 0,
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            top: "2px",
+            left: enabled ? "22px" : "2px",
+            width: "20px",
+            height: "20px",
+            backgroundColor: "white",
+            borderRadius: "50%",
+            transition: "left 0.2s ease-in-out",
+            boxShadow: "0 1px 2px rgba(0,0,0,0.2)",
+          }}
+        />
       </div>
     </div>
   );
@@ -89,7 +116,9 @@ export const Popup = () => {
   const [currentUrl, setCurrentUrl] = useState<string>();
   const [activeTabId, setActiveTabId] = useState<number>();
   const [isDisabled, setIsDisabled] = useState<boolean | null>(null);
-  const [isAutoReplyEnabled, setIsAutoReplyEnabled] = useState<boolean | null>(null);
+  const [isAutoReplyEnabled, setIsAutoReplyEnabled] = useState<boolean | null>(
+    null
+  );
 
   useEffect(() => {
     chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
@@ -108,12 +137,15 @@ export const Popup = () => {
         const url = new URL(tab.url);
         const origin = url.origin;
         setCurrentOrigin(origin);
-        chrome.storage.sync.get(["disabledSites", "autoReplySites"], (items) => {
-          const disabledSites: string[] = items.disabledSites || [];
-          setIsDisabled(disabledSites.includes(origin));
-          const autoReplySites: string[] = items.autoReplySites || [];
-          setIsAutoReplyEnabled(autoReplySites.includes(origin));
-        });
+        chrome.storage.sync.get(
+          ["disabledSites", "autoReplySites"],
+          (items) => {
+            const disabledSites: string[] = items.disabledSites || [];
+            setIsDisabled(disabledSites.includes(origin));
+            const autoReplySites: string[] = items.autoReplySites || [];
+            setIsAutoReplyEnabled(autoReplySites.includes(origin));
+          }
+        );
       } catch (error) {
         console.error("Unable to parse tab URL:", error);
         setCurrentOrigin(undefined);
@@ -125,7 +157,8 @@ export const Popup = () => {
   }, []);
 
   const handleToggleExtension = () => {
-    if (!currentOrigin || activeTabId === undefined || isDisabled === null) return;
+    if (!currentOrigin || activeTabId === undefined || isDisabled === null)
+      return;
     const nextDisabled = !isDisabled;
     chrome.storage.sync.get(["disabledSites"], (items) => {
       const disabledSites = new Set<string>(items.disabledSites || []);
@@ -134,19 +167,27 @@ export const Popup = () => {
       } else {
         disabledSites.delete(currentOrigin);
       }
-      chrome.storage.sync.set({ disabledSites: Array.from(disabledSites) }, () => {
-        if (chrome.runtime.lastError) return;
-        setIsDisabled(nextDisabled);
-        chrome.tabs.sendMessage(activeTabId, {
-          action: "setExtensionEnabled",
-          enabled: !nextDisabled,
-        });
-      });
+      chrome.storage.sync.set(
+        { disabledSites: Array.from(disabledSites) },
+        () => {
+          if (chrome.runtime.lastError) return;
+          setIsDisabled(nextDisabled);
+          chrome.tabs.sendMessage(activeTabId, {
+            action: "setExtensionEnabled",
+            enabled: !nextDisabled,
+          });
+        }
+      );
     });
   };
 
   const handleToggleAutoReply = () => {
-    if (!currentOrigin || activeTabId === undefined || isAutoReplyEnabled === null) return;
+    if (
+      !currentOrigin ||
+      activeTabId === undefined ||
+      isAutoReplyEnabled === null
+    )
+      return;
     const nextAutoReplyEnabled = !isAutoReplyEnabled;
     chrome.storage.sync.get(["autoReplySites"], (items) => {
       const autoReplySites = new Set<string>(items.autoReplySites || []);
@@ -155,10 +196,13 @@ export const Popup = () => {
       } else {
         autoReplySites.delete(currentOrigin);
       }
-      chrome.storage.sync.set({ autoReplySites: Array.from(autoReplySites) }, () => {
-        if (chrome.runtime.lastError) return;
-        setIsAutoReplyEnabled(nextAutoReplyEnabled);
-      });
+      chrome.storage.sync.set(
+        { autoReplySites: Array.from(autoReplySites) },
+        () => {
+          if (chrome.runtime.lastError) return;
+          setIsAutoReplyEnabled(nextAutoReplyEnabled);
+        }
+      );
     });
   };
 
@@ -168,43 +212,62 @@ export const Popup = () => {
 
   const handleSubmitIssue = () => {
     if (!currentUrl) return;
-    const title =  `Report an issue on ${new URL(currentUrl).hostname}`;
-    const url = `https://github.com/stonega/ainput/issues/new?title=${encodeURIComponent(title)}`;
+    const title = `Report an issue on ${new URL(currentUrl).hostname}`;
+    const url = `https://github.com/stonega/ainput/issues/new?title=${encodeURIComponent(
+      title
+    )}`;
     chrome.tabs.create({ url });
   };
 
-  const isLoading = isDisabled === null || !currentOrigin || activeTabId === undefined;
+  const isLoading =
+    isDisabled === null || !currentOrigin || activeTabId === undefined;
 
   return (
-    <div style={{ padding: "16px", minHeight: "200px", display: "flex", flexDirection: "column" }}>
+    <div
+      style={{
+        padding: "16px",
+        minHeight: "200px",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
       <GlobalStyles extraCss="width: 320px;" />
-      
+
       {/* Header */}
-      <header style={{ 
-        display: "flex", 
-        justifyContent: "space-between", 
-        alignItems: "center", 
-        marginBottom: "20px",
-        paddingBottom: "16px",
-        borderBottom: `1px solid ${theme.colors.border}`
-      }}>
+      <header
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: "20px",
+          paddingBottom: "16px",
+          borderBottom: `1px solid ${theme.colors.border}`,
+        }}
+      >
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <h1 style={{ fontSize: "18px", fontWeight: 800, color: theme.colors.primary, margin: 0 }}>
+          <h1
+            style={{
+              fontSize: "18px",
+              fontWeight: 800,
+              color: theme.colors.primary,
+              margin: 0,
+            }}
+          >
             AINPUT
           </h1>
         </div>
         <button
           onClick={openOptionsPage}
           className="btn-icon"
-          style={{ 
-            background: "transparent", 
-            border: "none", 
-            cursor: "pointer", 
+          style={{
+            background: "transparent",
+            border: "none",
+            cursor: "pointer",
             padding: "8px",
             borderRadius: "50%",
             display: "flex",
             color: theme.colors.textSecondary,
-            transition: "all 0.2s"
+            transition: "all 0.2s",
           }}
           title="Open Settings"
         >
@@ -214,24 +277,43 @@ export const Popup = () => {
 
       {/* Content */}
       <div style={{ flex: 1 }}>
-        <div style={{ marginBottom: "16px", fontSize: "13px", color: theme.colors.textSecondary }}>
-          Settings for <strong style={{ color: theme.colors.text }}>{new URL(currentOrigin || "http://localhost").hostname}</strong>
+        <div
+          style={{
+            marginBottom: "16px",
+            fontSize: "13px",
+            color: theme.colors.textSecondary,
+          }}
+        >
+          Settings for{" "}
+          <strong style={{ color: theme.colors.text }}>
+            {new URL(currentOrigin || "http://localhost").hostname}
+          </strong>
         </div>
 
         {isLoading ? (
-          <div style={{ textAlign: "center", padding: "20px", color: theme.colors.textSecondary }}>
+          <div
+            style={{
+              textAlign: "center",
+              padding: "20px",
+              color: theme.colors.textSecondary,
+            }}
+          >
             Loading...
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
             <ToggleSwitch
-              label={!isDisabled ? "Enabled on this site" : "Disabled on this site"}
-              sublabel={!isDisabled ? "AINPUT is active" : "AINPUT is turned off"}
+              label={
+                !isDisabled ? "Enabled on this site" : "Disabled on this site"
+              }
+              sublabel={
+                !isDisabled ? "AINPUT is active" : "AINPUT is turned off"
+              }
               enabled={!isDisabled}
               onToggle={handleToggleExtension}
               icon={<FaPowerOff />}
             />
-            
+
             <ToggleSwitch
               label="Auto-Reply"
               sublabel="Automatically suggest replies"
@@ -245,8 +327,21 @@ export const Popup = () => {
       </div>
 
       {/* Footer */}
-      <footer style={{ marginTop: "16px", paddingTop: "12px", borderTop: `1px solid ${theme.colors.border}`, textAlign: "center" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <footer
+        style={{
+          marginTop: "16px",
+          paddingTop: "12px",
+          borderTop: `1px solid ${theme.colors.border}`,
+          textAlign: "center",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
           <button
             onClick={handleSubmitIssue}
             className="btn-icon"
@@ -278,7 +373,7 @@ export const Popup = () => {
               cursor: "pointer",
               display: "inline-flex",
               alignItems: "center",
-              gap: "4px"
+              gap: "4px",
             }}
           >
             More settings <FaExternalLinkAlt size={10} />
