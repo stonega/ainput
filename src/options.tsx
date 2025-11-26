@@ -12,6 +12,7 @@ import {
   FaCheckCircle,
   FaExclamationCircle,
   FaTimes,
+  FaStar,
 } from "react-icons/fa";
 import { getTokenUsage } from "./db";
 import { theme, GlobalStyles } from "./theme";
@@ -1101,8 +1102,34 @@ const Options = () => {
             textAlign: "center",
             marginTop: "60px",
             paddingBottom: "20px",
+            display: "flex",
+            justifyContent: "center",
+            gap: "24px",
           }}
         >
+          <a
+            href="https://chromewebstore.google.com/detail/ainput/paleeakmljeofbpnnbnkllpbigccecnh"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              color: theme.colors.textSecondary,
+              textDecoration: "none",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "8px",
+              fontSize: "14px",
+              transition: "color 0.2s",
+            }}
+            onMouseEnter={(e) =>
+              (e.currentTarget.style.color = theme.colors.primary)
+            }
+            onMouseLeave={(e) =>
+              (e.currentTarget.style.color = theme.colors.textSecondary)
+            }
+          >
+            <FaStar size={18} />
+            Rate us on Chrome Store
+          </a>
           <a
             href="https://github.com/stonega/ainput"
             target="_blank"
@@ -1124,7 +1151,7 @@ const Options = () => {
             }
           >
             <FaGithub size={18} />
-            View Source on GitHub
+            Submit an issue on GitHub
           </a>
         </footer>
       </div>
