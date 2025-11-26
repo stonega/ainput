@@ -1,4 +1,4 @@
-// Background script for handling Gemini API calls
+// Background script for handling Gemini API calls with streaming support
 
 import { addTokenUsage } from "./db";
 
@@ -36,6 +36,208 @@ interface OpenAIResponse {
   };
 }
 
+// Streaming callback type
+type StreamCallback = (chunk: string, done: boolean) => void;
+
+// Streaming version of Gemini API call
+async function streamGeminiAPI(
+  prompt: string,
+  apiKey: string,
+  model: string,
+  kind: string,
+  onChunk: StreamCallback
+): Promise<string> {
+  const modelId = model || "gemini-2.5-flash";
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:streamGenerateContent?key=${apiKey}&alt=sse`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      contents: [
+        {
+          parts: [
+            {
+              text: prompt,
+            },
+          ],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 2048,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    if (errorData.error?.message?.toLowerCase().includes("quota")) {
+      throw new Error("You have exceeded your Gemini API quota.");
+    }
+    throw new Error(errorData.error?.message || `API request failed: ${response.statusText}`);
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    throw new Error("Failed to get response reader");
+  }
+
+  const decoder = new TextDecoder();
+  let fullText = "";
+  let totalTokens = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value, { stream: true });
+      const lines = chunk.split("\n");
+
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          const jsonStr = line.slice(6).trim();
+          if (!jsonStr) continue;
+
+          try {
+            const data: GeminiResponse = JSON.parse(jsonStr);
+
+            if (data.error) {
+              throw new Error(data.error.message);
+            }
+
+            if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
+              const text = data.candidates[0].content.parts[0].text;
+              fullText += text;
+              onChunk(text, false);
+            }
+
+            if (data.usageMetadata?.totalTokenCount) {
+              totalTokens = data.usageMetadata.totalTokenCount;
+            }
+          } catch (e) {
+            // Skip invalid JSON chunks
+            if (e instanceof SyntaxError) continue;
+            throw e;
+          }
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  // Log token usage
+  if (totalTokens > 0) {
+    addTokenUsage({
+      date: new Date().toISOString(),
+      model: modelId,
+      kind,
+      tokens: totalTokens,
+    });
+  }
+
+  onChunk("", true);
+  return fullText;
+}
+
+// Streaming version of OpenAI-compatible API call
+async function streamOpenAIAPI(
+  prompt: string,
+  apiKey: string,
+  baseUrl: string,
+  model: string,
+  isCustom: boolean,
+  kind: string,
+  onChunk: StreamCallback
+): Promise<string> {
+  const url = `${baseUrl}/v1/chat/completions`;
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${apiKey}`,
+  };
+
+  if (!isCustom) {
+    headers["HTTP-Referer"] = "https://github.com/stonega/ainput";
+    headers["X-Title"] = "AInput";
+  }
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: headers,
+    body: JSON.stringify({
+      model: model,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.7,
+      max_tokens: 2048,
+      stream: true,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error?.message || `API request failed: ${response.statusText}`);
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    throw new Error("Failed to get response reader");
+  }
+
+  const decoder = new TextDecoder();
+  let fullText = "";
+  let estimatedTokens = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value, { stream: true });
+      const lines = chunk.split("\n");
+
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          const jsonStr = line.slice(6).trim();
+          if (jsonStr === "[DONE]") continue;
+          if (!jsonStr) continue;
+
+          try {
+            const data = JSON.parse(jsonStr);
+            const content = data.choices?.[0]?.delta?.content;
+            if (content) {
+              fullText += content;
+              onChunk(content, false);
+            }
+          } catch (e) {
+            // Skip invalid JSON chunks
+            if (e instanceof SyntaxError) continue;
+            throw e;
+          }
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  // Estimate token usage for streaming (rough estimate: ~4 chars per token)
+  estimatedTokens = Math.ceil(fullText.length / 4) + Math.ceil(prompt.length / 4);
+  addTokenUsage({
+    date: new Date().toISOString(),
+    model: model,
+    kind,
+    tokens: estimatedTokens,
+  });
+
+  onChunk("", true);
+  return fullText;
+}
+
+// Non-streaming fallback for Gemini API
 async function callGeminiAPI(
   prompt: string,
   apiKey: string,
@@ -96,6 +298,7 @@ async function callGeminiAPI(
   return data.candidates[0].content.parts[0].text;
 }
 
+// Non-streaming fallback for OpenAI-compatible API
 async function callOpenAIAPI(
   prompt: string,
   apiKey: string,
@@ -152,6 +355,64 @@ async function callOpenAIAPI(
   return data.choices[0].message.content;
 }
 
+// Streaming version of callApi - sends chunks via callback
+async function streamApi(
+  prompt: string,
+  kind: string,
+  onChunk: StreamCallback
+): Promise<string> {
+  const settings = await chrome.storage.sync.get([
+    "models",
+    "activeModelId",
+    "apiKey",
+  ]);
+
+  if (settings.models && settings.activeModelId) {
+    const activeModel = settings.models.find(
+      (m: any) => m.id === settings.activeModelId
+    );
+    if (!activeModel) {
+      throw new Error("Active model not found. Please check your settings.");
+    }
+
+    if (activeModel.type === "gemini") {
+      return streamGeminiAPI(
+        prompt,
+        activeModel.apiKey,
+        activeModel.model || "gemini-2.5-flash",
+        kind,
+        onChunk
+      );
+    } else if (
+      activeModel.type === "openai" ||
+      activeModel.type === "openrouter" ||
+      activeModel.type === "custom"
+    ) {
+      return streamOpenAIAPI(
+        prompt,
+        activeModel.apiKey,
+        activeModel.baseUrl,
+        activeModel.model,
+        activeModel.type === "custom",
+        kind,
+        onChunk
+      );
+    } else {
+      throw new Error(`Unsupported model type: ${activeModel.type}`);
+    }
+  } else if (settings.models && !settings.activeModelId) {
+    throw new Error("Please select an active model in the extension options.");
+  } else if (settings.apiKey) {
+    // Legacy support for old settings
+    return streamGeminiAPI(prompt, settings.apiKey, "gemini-2.5-flash", "legacy", onChunk);
+  } else {
+    throw new Error(
+      "No API key or model configured. Please set your API key in the extension options."
+    );
+  }
+}
+
+// Non-streaming version (kept for backward compatibility and autoFillForm)
 async function callApi(prompt: string, kind: string): Promise<string> {
   const settings = await chrome.storage.sync.get([
     "models",
@@ -197,6 +458,7 @@ async function callApi(prompt: string, kind: string): Promise<string> {
   }
 }
 
+// Non-streaming message listener (kept for backward compatibility)
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "fixGrammar") {
     handleFixGrammar(message.text)
@@ -236,6 +498,58 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "openOptionsPage") {
     chrome.runtime.openOptionsPage();
   }
+});
+
+// Port-based streaming connection handler
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== "ainput-stream") return;
+
+  port.onMessage.addListener(async (message) => {
+    const { action, text, pageContent } = message;
+
+    try {
+      let prompt: string;
+      let kind: string;
+
+      switch (action) {
+        case "fixGrammar":
+          prompt = `Fix the grammar and spelling in the following text. Return ONLY the corrected text without any explanations or additional comments:\n\n${text}`;
+          kind = "fixGrammar";
+          break;
+        case "translate": {
+          const settings = await chrome.storage.sync.get(["targetLanguage"]);
+          const targetLanguage = settings.targetLanguage || "Spanish";
+          prompt = `Translate the following text to ${targetLanguage}. Return ONLY the translated text without any explanations or additional comments:\n\n${text}`;
+          kind = "translate";
+          break;
+        }
+        case "enhancePrompt":
+          prompt = `Enhance the following prompt to be more detailed and effective for large language models. Return ONLY the enhanced prompt without any explanations or additional comments:\n\n${text}`;
+          kind = "enhancePrompt";
+          break;
+        case "autoReply":
+          prompt = `Based on the following page content, generate a concise and relevant reply. The reply should be suitable for a comment or a short message. Return only the suggested reply, without any introductory phrases like "Here's a reply:" or any other explanations.\n\nPage Content:\n"""\n${pageContent}\n"""\n\nSuggested Reply:`;
+          kind = "autoReply";
+          break;
+        default:
+          port.postMessage({ type: "error", error: `Unknown action: ${action}` });
+          return;
+      }
+
+      await streamApi(prompt, kind, (chunk, done) => {
+        if (done) {
+          port.postMessage({ type: "done" });
+        } else {
+          port.postMessage({ type: "chunk", chunk });
+        }
+      });
+    } catch (error) {
+      port.postMessage({ 
+        type: "error", 
+        error: error instanceof Error ? error.message : String(error) 
+      });
+    }
+  });
 });
 
 async function handleFixGrammar(text: string): Promise<string> {

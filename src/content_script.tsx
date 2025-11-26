@@ -38,6 +38,59 @@ interface MessageResponse {
   error?: string;
 }
 
+// Streaming message types from background
+interface StreamMessage {
+  type: "chunk" | "done" | "error";
+  chunk?: string;
+  error?: string;
+}
+
+// Helper function to make streaming requests via port
+function streamRequest(
+  action: string,
+  data: { text?: string; pageContent?: string },
+  onChunk: (chunk: string) => void,
+  onDone: () => void,
+  onError: (error: string) => void
+): () => void {
+  const port = chrome.runtime.connect({ name: "ainput-stream" });
+
+  port.onMessage.addListener((message: StreamMessage) => {
+    switch (message.type) {
+      case "chunk":
+        if (message.chunk) {
+          onChunk(message.chunk);
+        }
+        break;
+      case "done":
+        onDone();
+        port.disconnect();
+        break;
+      case "error":
+        onError(message.error || "Unknown error");
+        port.disconnect();
+        break;
+    }
+  });
+
+  port.onDisconnect.addListener(() => {
+    if (chrome.runtime.lastError) {
+      onError(chrome.runtime.lastError.message || "Connection lost");
+    }
+  });
+
+  port.postMessage({ action, ...data });
+
+  // Return cleanup function
+  return () => {
+    try {
+      port.disconnect();
+    } catch {
+      // Ignore disconnect errors
+    }
+  };
+}
+
 const ButtonContainer: React.FC<ButtonContainerProps> = ({
   onFixGrammar,
   onTranslate,
@@ -458,7 +511,7 @@ const InputAccessory: React.FC<{
     };
   }, [textToAnimate, inputElement, setLoading]);
 
-  const handleAction = async (
+  const handleAction = (
     action: "fixGrammar" | "translate" | "enhancePrompt",
     element: EditableElement
   ) => {
@@ -470,23 +523,27 @@ const InputAccessory: React.FC<{
 
     setPopoverVisible(false);
     setLoading(true);
+    
+    // Clear the element and prepare for streaming
+    setElementValue(element, "");
+    let streamedText = "";
 
-    try {
-      const response = (await chrome.runtime.sendMessage({
-        action,
-        text,
-      })) as unknown as MessageResponse;
-
-      if (response && response.success && response.result) {
-        if (getXEditorRoot(element) || getRedditEditorRoot(element)) {
-          setElementValue(element, response.result);
-          setLoading(false);
-        } else {
-          setElementValue(element, "");
-          setTextToAnimate(response.result);
-        }
-      } else {
-        const errorMessage = response?.error || `Failed to ${action}`;
+    streamRequest(
+      action,
+      { text },
+      // onChunk - append chunk to element
+      (chunk) => {
+        streamedText += chunk;
+        setElementValue(element, streamedText);
+      },
+      // onDone
+      () => {
+        setLoading(false);
+      },
+      // onError
+      (errorMessage) => {
+        // Restore original text on error
+        setElementValue(element, text);
         if (
           errorMessage.includes("model") ||
           errorMessage.includes("API key") ||
@@ -500,51 +557,39 @@ const InputAccessory: React.FC<{
         }
         setLoading(false);
       }
-    } catch (error) {
-      const errorMessage = String(error);
-      if (
-        errorMessage.includes("model") ||
-        errorMessage.includes("API key") ||
-        errorMessage.includes("options")
-      ) {
-        if (confirm(errorMessage + " Click OK to open settings.")) {
-          chrome.runtime.sendMessage({ action: "openOptionsPage" });
-        }
-      } else {
-        alert("Error: " + errorMessage);
-      }
-      setLoading(false);
-    }
+    );
   };
 
   const onFixGrammar = () => handleAction("fixGrammar", inputElement);
   const onTranslate = () => handleAction("translate", inputElement);
   const onEnhancePrompt = () => handleAction("enhancePrompt", inputElement);
 
-  const onAutoReply = async () => {
+  const onAutoReply = () => {
     setPopoverVisible(false);
     setLoading(true);
 
-    try {
-      const documentClone = document.cloneNode(true) as Document;
-      const article = new Readability(documentClone).parse();
-      const pageContent = article?.textContent?.slice(0, 4000) || "";
+    const documentClone = document.cloneNode(true) as Document;
+    const article = new Readability(documentClone).parse();
+    const pageContent = article?.textContent?.slice(0, 4000) || "";
 
-      const response = (await chrome.runtime.sendMessage({
-        action: "autoReply",
-        pageContent,
-      })) as unknown as MessageResponse;
+    // Clear the element and prepare for streaming
+    setElementValue(inputElement, "");
+    let streamedText = "";
 
-      if (response && response.success && response.result) {
-        if (getXEditorRoot(inputElement) || getRedditEditorRoot(inputElement)) {
-          setElementValue(inputElement, response.result);
-          setLoading(false);
-        } else {
-          setElementValue(inputElement, "");
-          setTextToAnimate(response.result);
-        }
-      } else {
-        const errorMessage = response?.error || `Failed to auto reply`;
+    streamRequest(
+      "autoReply",
+      { pageContent },
+      // onChunk - append chunk to element
+      (chunk) => {
+        streamedText += chunk;
+        setElementValue(inputElement, streamedText);
+      },
+      // onDone
+      () => {
+        setLoading(false);
+      },
+      // onError
+      (errorMessage) => {
         if (
           errorMessage.includes("model") ||
           errorMessage.includes("API key") ||
@@ -558,21 +603,7 @@ const InputAccessory: React.FC<{
         }
         setLoading(false);
       }
-    } catch (error) {
-      const errorMessage = String(error);
-      if (
-        errorMessage.includes("model") ||
-        errorMessage.includes("API key") ||
-        errorMessage.includes("options")
-      ) {
-        if (confirm(errorMessage + " Click OK to open settings.")) {
-          chrome.runtime.sendMessage({ action: "openOptionsPage" });
-        }
-      } else {
-        alert("Error: " + errorMessage);
-      }
-      setLoading(false);
-    }
+    );
   };
 
   const onAutoFillForm = async () => {
@@ -903,44 +934,35 @@ document.addEventListener(
           const article = new Readability(documentClone).parse();
           const pageContent = article?.textContent?.slice(0, 4000) || "";
           target.dispatchEvent(new Event("ainput-loading-start"));
-          chrome.runtime.sendMessage(
-            {
-              action: "autoReply",
-              pageContent,
+          
+          // Use streaming for auto-reply on focus
+          let streamedText = "";
+          streamRequest(
+            "autoReply",
+            { pageContent },
+            // onChunk
+            (chunk) => {
+              streamedText += chunk;
+              setElementValue(target, streamedText);
             },
-            (response: MessageResponse) => {
-              if (chrome.runtime.lastError) {
-                console.error(
-                  "AInput Auto Reply Error:",
-                  chrome.runtime.lastError.message
-                );
-                target.dispatchEvent(new Event("ainput-loading-end"));
-                return;
-              }
-
-              if (response && response.success && response.result) {
-                setElementValue(target, "");
-                // Not using the animated text for now for auto-reply
-                setElementValue(target, response.result);
-              } else {
-                // Don't alert on auto-reply failure, just log it.
-                const errorMessage = response?.error || "Failed to get auto-reply";
-                console.error(
-                  "AInput Auto Reply Error:",
-                  errorMessage
-                );
-                 if (
-                  errorMessage.includes("model") ||
-                  errorMessage.includes("API key") ||
-                  errorMessage.includes("options")
-                ) {
-                   // Only ask once per session/page load to avoid spamming
-                   if (!window.hasShownAuthError) {
-                      window.hasShownAuthError = true;
-                      if (confirm(errorMessage + " Click OK to open settings.")) {
-                        chrome.runtime.sendMessage({ action: "openOptionsPage" });
-                      }
-                   }
+            // onDone
+            () => {
+              target.dispatchEvent(new Event("ainput-loading-end"));
+            },
+            // onError
+            (errorMessage) => {
+              console.error("AInput Auto Reply Error:", errorMessage);
+              if (
+                errorMessage.includes("model") ||
+                errorMessage.includes("API key") ||
+                errorMessage.includes("options")
+              ) {
+                // Only ask once per session/page load to avoid spamming
+                if (!window.hasShownAuthError) {
+                  window.hasShownAuthError = true;
+                  if (confirm(errorMessage + " Click OK to open settings.")) {
+                    chrome.runtime.sendMessage({ action: "openOptionsPage" });
+                  }
                 }
               }
               target.dispatchEvent(new Event("ainput-loading-end"));
@@ -1019,7 +1041,7 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
-const handleShortcut = async (action: "fixGrammar" | "translate") => {
+const handleShortcut = (action: "fixGrammar" | "translate") => {
   const element = activeInput;
   if (!element) return;
 
@@ -1054,32 +1076,49 @@ const handleShortcut = async (action: "fixGrammar" | "translate") => {
   }
 
   element.dispatchEvent(new Event("ainput-loading-start"));
+  
+  // Store original values for potential restoration and streaming replacement
+  const originalValue = isInputElement ? element.value : "";
+  let streamedText = "";
 
-  try {
-    const response = (await chrome.runtime.sendMessage({
-      action,
-      text: textToProcess,
-    })) as unknown as MessageResponse;
-
-    if (response && response.success && response.result) {
+  streamRequest(
+    action,
+    { text: textToProcess },
+    // onChunk - replace selected text with streamed content
+    (chunk) => {
+      streamedText += chunk;
       if (isInputElement && selectionStart !== null && selectionEnd !== null) {
-        const { value } = element;
         element.value =
-          value.slice(0, selectionStart) +
-          response.result +
-          value.slice(selectionEnd);
+          originalValue.slice(0, selectionStart) +
+          streamedText +
+          originalValue.slice(selectionEnd);
         element.dispatchEvent(new Event("input", { bubbles: true }));
       } else if (element.isContentEditable) {
+        // For contentEditable, we update the full content incrementally
         const selection = window.getSelection();
         if (selection && selection.rangeCount > 0) {
           const range = selection.getRangeAt(0);
           range.deleteContents();
-          range.insertNode(document.createTextNode(response.result));
-          element.dispatchEvent(new Event("input", { bubbles: true }));
+          range.insertNode(document.createTextNode(streamedText));
+          // Collapse selection to end
+          range.collapse(false);
+          selection.removeAllRanges();
+          selection.addRange(range);
         }
+        element.dispatchEvent(new Event("input", { bubbles: true }));
       }
-    } else {
-      const errorMessage = response?.error || `Failed to ${action}`;
+    },
+    // onDone
+    () => {
+      element.dispatchEvent(new Event("ainput-loading-end"));
+    },
+    // onError
+    (errorMessage) => {
+      // Restore original text on error
+      if (isInputElement) {
+        element.value = originalValue;
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+      }
       if (
         errorMessage.includes("model") ||
         errorMessage.includes("API key") ||
@@ -1091,23 +1130,9 @@ const handleShortcut = async (action: "fixGrammar" | "translate") => {
       } else {
         alert("Error: " + errorMessage);
       }
+      element.dispatchEvent(new Event("ainput-loading-end"));
     }
-  } catch (error) {
-    const errorMessage = String(error);
-    if (
-      errorMessage.includes("model") ||
-      errorMessage.includes("API key") ||
-      errorMessage.includes("options")
-    ) {
-      if (confirm(errorMessage + " Click OK to open settings.")) {
-        chrome.runtime.sendMessage({ action: "openOptionsPage" });
-      }
-    } else {
-      alert("Error: " + errorMessage);
-    }
-  } finally {
-    element.dispatchEvent(new Event("ainput-loading-end"));
-  }
+  );
 };
 
 const handleAutoFillFormShortcut = async () => {
