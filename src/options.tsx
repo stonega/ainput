@@ -18,7 +18,6 @@ import {
   FaTimes,
   FaStar,
   FaBolt,
-  FaSyncAlt,
 } from "react-icons/fa";
 import { getTokenUsage } from "./db";
 import { theme, GlobalStyles } from "./theme";
@@ -36,11 +35,9 @@ import {
   validateCustomActions,
 } from "./custom-actions";
 import {
-  FALLBACK_OPENROUTER_FREE_MODEL,
-  fetchOpenRouterFreeModel,
   LEGACY_OPENROUTER_FREE_MODEL_IDS,
   OPENROUTER_FREE_MODEL_ID,
-  OpenRouterFreeModelMetadata,
+  OPENROUTER_FREE_ROUTER,
 } from "./openrouter-models";
 
 // --- Types ---
@@ -89,15 +86,13 @@ const CHROME_AI_MODEL: Model = {
   model: "gemini-nano",
 };
 
-const createOpenRouterFreeModel = (
-  metadata: OpenRouterFreeModelMetadata = FALLBACK_OPENROUTER_FREE_MODEL
-): Model => ({
+const createOpenRouterFreeModel = (): Model => ({
   id: OPENROUTER_FREE_MODEL_ID,
-  name: metadata.name,
+  name: "OpenRouter Free",
   apiKey: FREE_OPENROUTER_API_KEY,
   type: "openrouter",
   baseUrl: "https://openrouter.ai/api",
-  model: metadata.model,
+  model: OPENROUTER_FREE_ROUTER,
 });
 
 const isManagedOpenRouterFreeModel = (modelId: string): boolean =>
@@ -106,8 +101,7 @@ const isManagedOpenRouterFreeModel = (modelId: string): boolean =>
 
 const reconcileOpenRouterFreeModel = (
   models: Model[],
-  activeModelId: string | null,
-  refreshedMetadata: OpenRouterFreeModelMetadata | null
+  activeModelId: string | null
 ): {
   models: Model[];
   activeModelId: string | null;
@@ -120,12 +114,7 @@ const reconcileOpenRouterFreeModel = (
     return { models, activeModelId, changed: false };
   }
 
-  const existingManagedModel = models.find(
-    (model) => model.id === OPENROUTER_FREE_MODEL_ID
-  );
-  const managedModel = refreshedMetadata
-    ? createOpenRouterFreeModel(refreshedMetadata)
-    : existingManagedModel || createOpenRouterFreeModel();
+  const managedModel = createOpenRouterFreeModel();
   const reconciledModels = models.filter(
     (model) => !isManagedOpenRouterFreeModel(model.id)
   );
@@ -330,8 +319,6 @@ export const Options = () => {
   const [editingModelId, setEditingModelId] = useState<string | null>(null);
   const [editingModel, setEditingModel] = useState<Model | null>(null);
   const [modelsLoaded, setModelsLoaded] = useState(false);
-  const [refreshingOpenRouterFreeModel, setRefreshingOpenRouterFreeModel] =
-    useState(false);
   const [chromeAIAvailability, setChromeAIAvailability] = useState<
     ChromeAIAvailability | "checking"
   >("checking");
@@ -377,19 +364,9 @@ export const Options = () => {
         const originalStoredModels = Array.isArray(items.models)
           ? (items.models as Model[])
           : [];
-        const shouldRefreshOpenRouterFreeModel =
-          (!items.modelsInitialized && originalStoredModels.length === 0) ||
-          originalStoredModels.some((model) =>
-            isManagedOpenRouterFreeModel(model.id)
-          );
-        const [availability, refreshedFreeModelMetadata] = await Promise.all([
-          getChromeAIAvailability().catch(
-            (): ChromeAIAvailability => "unsupported"
-          ),
-          shouldRefreshOpenRouterFreeModel
-            ? fetchOpenRouterFreeModel()
-            : Promise.resolve(null),
-        ]);
+        const availability = await getChromeAIAvailability().catch(
+          (): ChromeAIAvailability => "unsupported"
+        );
 
         if (cancelled) return;
         setChromeAIAvailability(availability);
@@ -397,10 +374,7 @@ export const Options = () => {
         if (originalStoredModels.length > 0) {
           const reconciled = reconcileOpenRouterFreeModel(
             originalStoredModels,
-            typeof items.activeModelId === "string"
-              ? items.activeModelId
-              : null,
-            refreshedFreeModelMetadata
+            typeof items.activeModelId === "string" ? items.activeModelId : null
           );
           const storedModels = reconciled.models;
           const storedActiveModelExists = storedModels.some(
@@ -440,9 +414,7 @@ export const Options = () => {
             chrome.storage.sync.set(storageUpdates);
           }
         } else if (!items.modelsInitialized) {
-          const freeModel = createOpenRouterFreeModel(
-            refreshedFreeModelMetadata || FALLBACK_OPENROUTER_FREE_MODEL
-          );
+          const freeModel = createOpenRouterFreeModel();
           const canOfferChromeAI =
             availability !== "unsupported" && availability !== "unavailable";
           const initialModels = canOfferChromeAI
@@ -592,44 +564,6 @@ export const Options = () => {
         showStatus("Model updated successfully!");
       }
     );
-  };
-
-  const refreshOpenRouterFreeModel = async () => {
-    if (refreshingOpenRouterFreeModel) return;
-
-    setRefreshingOpenRouterFreeModel(true);
-    try {
-      const refreshedMetadata = await fetchOpenRouterFreeModel();
-      if (!refreshedMetadata) {
-        showStatus(
-          "Unable to refresh OpenRouter Free. Try again later.",
-          "error"
-        );
-        return;
-      }
-
-      const refreshedModel = createOpenRouterFreeModel(refreshedMetadata);
-      const updatedModels = models.map((model) =>
-        model.id === OPENROUTER_FREE_MODEL_ID ? refreshedModel : model
-      );
-
-      await setSyncStorage({
-        models: updatedModels,
-        modelsInitialized: true,
-      });
-      setModels(updatedModels);
-      cancelEditingModel();
-      showStatus("OpenRouter Free refreshed successfully!");
-    } catch (error) {
-      showStatus(
-        error instanceof Error
-          ? error.message
-          : "Unable to refresh OpenRouter Free.",
-        "error"
-      );
-    } finally {
-      setRefreshingOpenRouterFreeModel(false);
-    }
   };
 
   const enableChromeAI = async () => {
@@ -1355,34 +1289,8 @@ export const Options = () => {
                               flex: "0 0 auto",
                             }}
                           >
-                            {model.id === OPENROUTER_FREE_MODEL_ID ? (
-                              <button
-                                type="button"
-                                className="btn-icon transition-all"
-                                onClick={refreshOpenRouterFreeModel}
-                                disabled={refreshingOpenRouterFreeModel}
-                                title="Refresh OpenRouter Free"
-                                aria-label="Refresh OpenRouter Free"
-                                style={{
-                                  border: "none",
-                                  background: "transparent",
-                                  color: refreshingOpenRouterFreeModel
-                                    ? theme.colors.primary
-                                    : theme.colors.textSecondary,
-                                  cursor: refreshingOpenRouterFreeModel
-                                    ? "wait"
-                                    : "pointer",
-                                  opacity: refreshingOpenRouterFreeModel
-                                    ? 0.65
-                                    : 1,
-                                  padding: "8px",
-                                  borderRadius: "50%",
-                                  display: "flex",
-                                }}
-                              >
-                                <FaSyncAlt />
-                              </button>
-                            ) : model.type !== "chrome" ? (
+                            {model.type !== "chrome" &&
+                            model.id !== OPENROUTER_FREE_MODEL_ID ? (
                               <button
                                 type="button"
                                 className="btn-icon transition-all"
