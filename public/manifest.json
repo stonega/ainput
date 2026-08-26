@@ -3,20 +3,25 @@
 
   "name": "AInput",
   "description": "Make every input on the webpage more intelligent.",
-  "version": "1.7",
+  "version": "1.8",
 
   "options_page": "options.html",
 
   "action": {
-    "default_icon": "icon.png",
+    "default_icon": {
+      "16": "icon-v2-16.png",
+      "32": "icon-v2-32.png",
+      "48": "icon-v2-48.png",
+      "128": "icon-v2-128.png"
+    },
     "default_popup": "popup.html"
   },
 
   "icons": {
-    "16": "icon.png",
-    "32": "icon.png",
-    "48": "icon.png",
-    "128": "icon.png"
+    "16": "icon-v2-16.png",
+    "32": "icon-v2-32.png",
+    "48": "icon-v2-48.png",
+    "128": "icon-v2-128.png"
   },
 
   "commands": {

@@ -1,12 +1,12 @@
 import React from "react";
-import { createRoot } from "react-dom/client";
+import { createRoot, Root } from "react-dom/client";
 import {
   MdTranslate,
   MdAutoFixHigh,
   MdHourglassEmpty,
-  MdAutoAwesome,
   MdReply,
   MdDynamicForm,
+  MdBolt,
 } from "react-icons/md";
 import { Readability } from "@mozilla/readability";
 import {
@@ -16,6 +16,16 @@ import {
   getElementValue,
   setElementValue,
 } from "./site-exceptions";
+import { promptChromeAI, streamChromeAIPrompt } from "./chrome-ai";
+import {
+  buildActionPrompt,
+  buildFormFillPrompt,
+  buildFormFillSchema,
+  parseFormFillResponse,
+  StreamAction,
+  StreamPromptData,
+} from "./prompts";
+import { CustomAction, normalizeCustomActions } from "./custom-actions";
 
 declare global {
   interface Window {
@@ -26,9 +36,10 @@ declare global {
 interface ButtonContainerProps {
   onFixGrammar: () => void;
   onTranslate: () => void;
-  onEnhancePrompt: () => void;
   onAutoReply: () => void;
   onAutoFillForm: () => void;
+  customActions: CustomAction[];
+  onCustomAction: (action: CustomAction) => void;
   loading: boolean;
   isInForm: boolean;
 }
@@ -39,6 +50,19 @@ interface MessageResponse {
   error?: string;
 }
 
+interface StoredModel {
+  id: string;
+  type: string;
+}
+
+const CHROME_AI_TRANSLATION_LANGUAGES = new Set([
+  "English",
+  "Japanese",
+  "Spanish",
+  "German",
+  "French",
+]);
+
 // Streaming message types from background
 interface StreamMessage {
   type: "chunk" | "done" | "error";
@@ -46,14 +70,46 @@ interface StreamMessage {
   error?: string;
 }
 
-// Helper function to make streaming requests via port
-function streamRequest(
-  action: string,
-  data: { text?: string; pageContent?: string },
+const getActiveModel = async (): Promise<StoredModel | null> => {
+  const settings = await chrome.storage.sync.get(["models", "activeModelId"]);
+  if (!settings.models || !settings.activeModelId) return null;
+
+  return (
+    settings.models.find(
+      (model: StoredModel) => model.id === settings.activeModelId
+    ) || null
+  );
+};
+
+const recordChromeAIUsage = (prompt: string, result: string, kind: string) => {
+  const estimatedTokens =
+    Math.ceil(prompt.length / 4) + Math.ceil(result.length / 4);
+
+  chrome.runtime.sendMessage(
+    {
+      action: "recordTokenUsage",
+      usage: {
+        date: new Date().toISOString(),
+        model: "chrome/gemini-nano",
+        kind,
+        tokens: estimatedTokens,
+      },
+    },
+    () => {
+      // Read lastError to prevent a console warning if the worker stops while
+      // the best-effort usage record is in flight.
+      void chrome.runtime.lastError;
+    }
+  );
+};
+
+const startBackgroundStreamRequest = (
+  action: StreamAction,
+  data: StreamPromptData,
   onChunk: (chunk: string) => void,
   onDone: () => void,
   onError: (error: string) => void
-): () => void {
+): (() => void) => {
   const port = chrome.runtime.connect({ name: "ainput-stream" });
 
   port.onMessage.addListener((message: StreamMessage) => {
@@ -90,22 +146,96 @@ function streamRequest(
       // Ignore disconnect errors
     }
   };
+};
+
+// Routes Chrome Built-in AI through this document and cloud models through the
+// extension service worker, where API credentials remain centralized.
+function streamRequest(
+  action: StreamAction,
+  data: StreamPromptData,
+  onChunk: (chunk: string) => void,
+  onDone: () => void,
+  onError: (error: string) => void
+): () => void {
+  let cancelled = false;
+  let cleanupRequest: (() => void) | null = null;
+  const controller = new AbortController();
+
+  void (async () => {
+    try {
+      const activeModel = await getActiveModel();
+      if (cancelled) return;
+
+      if (activeModel?.type !== "chrome") {
+        cleanupRequest = startBackgroundStreamRequest(
+          action,
+          data,
+          onChunk,
+          onDone,
+          onError
+        );
+        return;
+      }
+
+      let targetLanguage = "English";
+      if (action === "translate") {
+        const settings = await chrome.storage.sync.get(["targetLanguage"]);
+        targetLanguage = settings.targetLanguage || "English";
+        if (!CHROME_AI_TRANSLATION_LANGUAGES.has(targetLanguage)) {
+          throw new Error(
+            `Chrome Built-in AI doesn't currently support ${targetLanguage}. Select another model in AInput settings for this translation.`
+          );
+        }
+      }
+
+      const prompt = buildActionPrompt(action, data, targetLanguage);
+      const result = await streamChromeAIPrompt(
+        prompt,
+        (chunk) => {
+          if (!cancelled) onChunk(chunk);
+        },
+        controller.signal
+      );
+
+      if (!cancelled) {
+        const usageKind =
+          action === "customAction" && data.customActionName?.trim()
+            ? `custom: ${data.customActionName.trim().slice(0, 40)}`
+            : action;
+        recordChromeAIUsage(prompt, result, usageKind);
+        onDone();
+      }
+    } catch (error) {
+      if (!cancelled) {
+        onError(error instanceof Error ? error.message : String(error));
+      }
+    }
+  })();
+
+  return () => {
+    cancelled = true;
+    controller.abort();
+    cleanupRequest?.();
+  };
 }
 
 const ButtonContainer: React.FC<ButtonContainerProps> = ({
   onFixGrammar,
   onTranslate,
-  onEnhancePrompt,
   onAutoReply,
   onAutoFillForm,
+  customActions,
+  onCustomAction,
   loading,
   isInForm,
 }) => {
   const [hoverFix, setHoverFix] = React.useState(false);
   const [hoverTranslate, setHoverTranslate] = React.useState(false);
-  const [hoverEnhance, setHoverEnhance] = React.useState(false);
   const [hoverAutoReply, setHoverAutoReply] = React.useState(false);
   const [hoverAutoFill, setHoverAutoFill] = React.useState(false);
+  const [hoverCustomActionId, setHoverCustomActionId] = React.useState<
+    string | null
+  >(null);
 
   const buttonStyle: React.CSSProperties = {
     display: "flex",
@@ -196,21 +326,6 @@ const ButtonContainer: React.FC<ButtonContainerProps> = ({
         <MdReply size={16} color="#007BFF" />
         <span style={{ whiteSpace: "nowrap" }}>Auto Reply</span>
       </button>
-      <button
-        onClick={onEnhancePrompt}
-        disabled={loading}
-        onMouseEnter={() => setHoverEnhance(true)}
-        onMouseLeave={() => setHoverEnhance(false)}
-        style={{
-          ...buttonStyle,
-          backgroundColor: hoverEnhance ? "#f0f0f0" : "transparent",
-          cursor: loading ? "not-allowed" : "pointer",
-          opacity: loading ? 0.6 : 1,
-        }}
-      >
-        <MdAutoAwesome size={16} color="#D4AF37" />
-        <span style={{ whiteSpace: "nowrap" }}>Enhance Prompt</span>
-      </button>
       {isInForm && (
         <button
           onClick={onAutoFillForm}
@@ -228,8 +343,68 @@ const ButtonContainer: React.FC<ButtonContainerProps> = ({
           <span style={{ whiteSpace: "nowrap" }}>Auto Fill Form</span>
         </button>
       )}
+      {customActions.length > 0 && (
+        <>
+          <div
+            aria-hidden="true"
+            style={{
+              height: "1px",
+              margin: "2px 8px",
+              backgroundColor: "#ece7f2",
+            }}
+          />
+          <div
+            style={{
+              padding: "2px 10px 0",
+              color: "#756b7f",
+              fontSize: "10px",
+              fontWeight: 700,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+            }}
+          >
+            Custom
+          </div>
+          {customActions.map((action) => (
+            <button
+              key={action.id}
+              onClick={() => onCustomAction(action)}
+              disabled={loading}
+              onMouseEnter={() => setHoverCustomActionId(action.id)}
+              onMouseLeave={() => setHoverCustomActionId(null)}
+              style={{
+                ...buttonStyle,
+                backgroundColor:
+                  hoverCustomActionId === action.id ? "#f6f1fb" : "transparent",
+                cursor: loading ? "not-allowed" : "pointer",
+                opacity: loading ? 0.6 : 1,
+                maxWidth: "260px",
+              }}
+            >
+              <MdBolt size={16} color="#7C3AED" />
+              <span
+                style={{
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
+                {action.name}
+              </span>
+            </button>
+          ))}
+        </>
+      )}
     </div>
   );
+};
+
+const getPageContext = (): string => {
+  const documentClone = document.cloneNode(true) as Document;
+  const article = new Readability(documentClone).parse();
+  const readableText = article?.textContent?.trim();
+  const fallbackText = document.body?.innerText?.trim();
+  return (readableText || fallbackText || "").slice(0, 4000);
 };
 
 /**
@@ -250,6 +425,38 @@ interface FormFillResponse {
   result?: Record<string, string>;
   error?: string;
 }
+
+const requestAutoFillForm = async (
+  fields: FormFieldInfo[]
+): Promise<FormFillResponse> => {
+  const activeModel = await getActiveModel();
+  if (activeModel?.type !== "chrome") {
+    return (await chrome.runtime.sendMessage({
+      action: "autoFillForm",
+      fields,
+    })) as unknown as FormFillResponse;
+  }
+
+  const prompt = buildFormFillPrompt(fields);
+  let result: string;
+
+  try {
+    result = await promptChromeAI(prompt, {
+      responseConstraint: buildFormFillSchema(fields),
+    });
+  } catch (error) {
+    const errorName =
+      error && typeof error === "object" && "name" in error
+        ? String(error.name)
+        : "";
+    if (errorName !== "NotSupportedError") throw error;
+    result = await promptChromeAI(prompt);
+  }
+
+  const values = parseFormFillResponse(result);
+  recordChromeAIUsage(prompt, result, "autoFillForm");
+  return { success: true, result: values };
+};
 
 const detectFormFieldType = (
   element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
@@ -433,6 +640,7 @@ const fillFormFields = (
 
 let activeInput: EditableElement | null = null;
 let accessoryContainer: HTMLDivElement | null = null;
+let accessoryRoot: Root | null = null;
 let removeListeners: (() => void) | null = null;
 
 const InputAccessory: React.FC<{
@@ -441,12 +649,35 @@ const InputAccessory: React.FC<{
   const [popoverVisible, setPopoverVisible] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [textToAnimate, setTextToAnimate] = React.useState<string | null>(null);
+  const [customActions, setCustomActions] = React.useState<CustomAction[]>([]);
   const accessoryRef = React.useRef<HTMLDivElement>(null);
   const popoverRef = React.useRef<HTMLDivElement>(null);
   const [popoverTop, setPopoverTop] = React.useState("16px");
 
   // Check if the input element is inside a form
   const isInForm = !!inputElement.closest("form");
+
+  React.useEffect(() => {
+    const applyStoredActions = (value: unknown) => {
+      setCustomActions(normalizeCustomActions(value));
+    };
+
+    chrome.storage.sync.get({ customActions: [] }, (items) => {
+      applyStoredActions(items.customActions);
+    });
+
+    const handleStorageChange = (
+      changes: Record<string, chrome.storage.StorageChange>,
+      areaName: string
+    ) => {
+      if (areaName === "sync" && changes.customActions) {
+        applyStoredActions(changes.customActions.newValue);
+      }
+    };
+
+    chrome.storage.onChanged.addListener(handleStorageChange);
+    return () => chrome.storage.onChanged.removeListener(handleStorageChange);
+  }, []);
 
   React.useEffect(() => {
     const handleLoadingStart = () => setLoading(true);
@@ -560,7 +791,7 @@ const InputAccessory: React.FC<{
   }, [textToAnimate, inputElement, setLoading]);
 
   const handleAction = (
-    action: "fixGrammar" | "translate" | "enhancePrompt",
+    action: "fixGrammar" | "translate",
     element: EditableElement
   ) => {
     const text = getElementValue(element);
@@ -610,15 +841,12 @@ const InputAccessory: React.FC<{
 
   const onFixGrammar = () => handleAction("fixGrammar", inputElement);
   const onTranslate = () => handleAction("translate", inputElement);
-  const onEnhancePrompt = () => handleAction("enhancePrompt", inputElement);
 
   const onAutoReply = () => {
     setPopoverVisible(false);
     setLoading(true);
 
-    const documentClone = document.cloneNode(true) as Document;
-    const article = new Readability(documentClone).parse();
-    const pageContent = article?.textContent?.slice(0, 4000) || "";
+    const pageContent = getPageContext();
 
     // Clear the element and prepare for streaming
     setElementValue(inputElement, "");
@@ -654,6 +882,56 @@ const InputAccessory: React.FC<{
     );
   };
 
+  const onCustomAction = (action: CustomAction) => {
+    const input =
+      action.inputSource === "input"
+        ? getElementValue(inputElement)
+        : getPageContext();
+    if (!input.trim()) {
+      alert(
+        action.inputSource === "input"
+          ? "Please enter some text first."
+          : "No readable page context was found."
+      );
+      return;
+    }
+
+    const originalText = getElementValue(inputElement);
+    setPopoverVisible(false);
+    setLoading(true);
+    setElementValue(inputElement, "");
+
+    let streamedText = "";
+    streamRequest(
+      "customAction",
+      {
+        text: input,
+        customPrompt: action.prompt,
+        customActionName: action.name,
+      },
+      (chunk) => {
+        streamedText += chunk;
+        setElementValue(inputElement, streamedText);
+      },
+      () => setLoading(false),
+      (errorMessage) => {
+        setElementValue(inputElement, originalText);
+        if (
+          errorMessage.includes("model") ||
+          errorMessage.includes("API key") ||
+          errorMessage.includes("options")
+        ) {
+          if (confirm(errorMessage + " Click OK to open settings.")) {
+            chrome.runtime.sendMessage({ action: "openOptionsPage" });
+          }
+        } else {
+          alert("Error: " + errorMessage);
+        }
+        setLoading(false);
+      }
+    );
+  };
+
   const onAutoFillForm = async () => {
     setPopoverVisible(false);
     setLoading(true);
@@ -667,10 +945,7 @@ const InputAccessory: React.FC<{
         return;
       }
 
-      const response = (await chrome.runtime.sendMessage({
-        action: "autoFillForm",
-        fields: formFields,
-      })) as unknown as FormFillResponse;
+      const response = await requestAutoFillForm(formFields);
 
       if (response && response.success && response.result) {
         fillFormFields(formFields, response.result);
@@ -736,14 +1011,17 @@ const InputAccessory: React.FC<{
             boxShadow: "0 2px 14px rgba(0,0,0,0.2)",
             border: "1px solid #f9f9f9",
             padding: "4px",
+            maxHeight: "min(520px, calc(100vh - 24px))",
+            overflowY: "auto",
           }}
         >
           <ButtonContainer
             onFixGrammar={onFixGrammar}
             onTranslate={onTranslate}
-            onEnhancePrompt={onEnhancePrompt}
             onAutoReply={onAutoReply}
             onAutoFillForm={onAutoFillForm}
+            customActions={customActions}
+            onCustomAction={onCustomAction}
             loading={loading}
             isInForm={isInForm}
           />
@@ -886,8 +1164,8 @@ function showAccessoryFor(element: EditableElement) {
   accessoryContainer = document.createElement("div");
   document.body.appendChild(accessoryContainer);
 
-  const root = createRoot(accessoryContainer);
-  root.render(<InputAccessory inputElement={element} />);
+  accessoryRoot = createRoot(accessoryContainer);
+  accessoryRoot.render(<InputAccessory inputElement={element} />);
 
   positionAccessory(element, accessoryContainer);
 
@@ -918,6 +1196,8 @@ function hideAccessory() {
     removeListeners = null;
   }
   if (accessoryContainer) {
+    accessoryRoot?.unmount();
+    accessoryRoot = null;
     if (document.body.contains(accessoryContainer)) {
       document.body.removeChild(accessoryContainer);
     }
@@ -970,9 +1250,7 @@ document.addEventListener(
       if (isEditable) {
         const text = getElementValue(target);
         if (!text.trim()) {
-          const documentClone = document.cloneNode(true) as Document;
-          const article = new Readability(documentClone).parse();
-          const pageContent = article?.textContent?.slice(0, 4000) || "";
+          const pageContent = getPageContext();
           target.dispatchEvent(new Event("ainput-loading-start"));
 
           // Use streaming for auto-reply on focus
@@ -1039,6 +1317,7 @@ document.addEventListener(
   "focusout",
   (event) => {
     const relatedTarget = event.relatedTarget as HTMLElement;
+    if (activeInput && relatedTarget === activeInput) return;
     if (!accessoryContainer || !accessoryContainer.contains(relatedTarget)) {
       hideAccessory();
     }
@@ -1192,10 +1471,7 @@ const handleAutoFillFormShortcut = async () => {
   }
 
   try {
-    const response = (await chrome.runtime.sendMessage({
-      action: "autoFillForm",
-      fields: formFields,
-    })) as unknown as FormFillResponse;
+    const response = await requestAutoFillForm(formFields);
 
     if (response && response.success && response.result) {
       fillFormFields(formFields, response.result);

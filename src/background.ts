@@ -1,6 +1,7 @@
 // Background script for handling Gemini API calls with streaming support
 
 import { addTokenUsage } from "./db";
+import { buildActionPrompt, StreamAction, StreamPromptData } from "./prompts";
 
 interface GeminiResponse {
   candidates?: Array<{
@@ -38,6 +39,19 @@ interface OpenAIResponse {
 
 // Streaming callback type
 type StreamCallback = (chunk: string, done: boolean) => void;
+
+type OpenAICompatibleProvider = "openai" | "openrouter" | "deepseek" | "custom";
+
+const getChatCompletionsUrl = (
+  baseUrl: string,
+  provider: OpenAICompatibleProvider
+): string => {
+  const normalizedBaseUrl = baseUrl.replace(/\/+$/, "");
+  if (provider === "deepseek" || normalizedBaseUrl.endsWith("/v1")) {
+    return `${normalizedBaseUrl}/chat/completions`;
+  }
+  return `${normalizedBaseUrl}/v1/chat/completions`;
+};
 
 // Streaming version of Gemini API call
 async function streamGeminiAPI(
@@ -152,17 +166,17 @@ async function streamOpenAIAPI(
   apiKey: string,
   baseUrl: string,
   model: string,
-  isCustom: boolean,
+  provider: OpenAICompatibleProvider,
   kind: string,
   onChunk: StreamCallback
 ): Promise<string> {
-  const url = `${baseUrl}/v1/chat/completions`;
+  const url = getChatCompletionsUrl(baseUrl, provider);
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     Authorization: `Bearer ${apiKey}`,
   };
 
-  if (!isCustom) {
+  if (provider === "openrouter") {
     headers["HTTP-Referer"] = "https://github.com/stonega/ainput";
     headers["X-Title"] = "AInput";
   }
@@ -309,16 +323,16 @@ async function callOpenAIAPI(
   apiKey: string,
   baseUrl: string,
   model: string,
-  isCustom: boolean,
+  provider: OpenAICompatibleProvider,
   kind: string
 ): Promise<string> {
-  const url = `${baseUrl}/v1/chat/completions`;
+  const url = getChatCompletionsUrl(baseUrl, provider);
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     Authorization: `Bearer ${apiKey}`,
   };
 
-  if (!isCustom) {
+  if (provider === "openrouter") {
     headers["HTTP-Referer"] = "https://github.com/stonega/ainput";
     headers["X-Title"] = "AInput";
   }
@@ -380,7 +394,11 @@ async function streamApi(
       throw new Error("Active model not found. Please check your settings.");
     }
 
-    if (activeModel.type === "gemini") {
+    if (activeModel.type === "chrome") {
+      throw new Error(
+        "Chrome Built-in AI requires the latest AInput page script. Reload this tab and try again."
+      );
+    } else if (activeModel.type === "gemini") {
       return streamGeminiAPI(
         prompt,
         activeModel.apiKey,
@@ -391,6 +409,7 @@ async function streamApi(
     } else if (
       activeModel.type === "openai" ||
       activeModel.type === "openrouter" ||
+      activeModel.type === "deepseek" ||
       activeModel.type === "custom"
     ) {
       return streamOpenAIAPI(
@@ -398,7 +417,7 @@ async function streamApi(
         activeModel.apiKey,
         activeModel.baseUrl,
         activeModel.model,
-        activeModel.type === "custom",
+        activeModel.type,
         kind,
         onChunk
       );
@@ -439,7 +458,11 @@ async function callApi(prompt: string, kind: string): Promise<string> {
       throw new Error("Active model not found. Please check your settings.");
     }
 
-    if (activeModel.type === "gemini") {
+    if (activeModel.type === "chrome") {
+      throw new Error(
+        "Chrome Built-in AI requires the latest AInput page script. Reload this tab and try again."
+      );
+    } else if (activeModel.type === "gemini") {
       return callGeminiAPI(
         prompt,
         activeModel.apiKey,
@@ -449,6 +472,7 @@ async function callApi(prompt: string, kind: string): Promise<string> {
     } else if (
       activeModel.type === "openai" ||
       activeModel.type === "openrouter" ||
+      activeModel.type === "deepseek" ||
       activeModel.type === "custom"
     ) {
       return callOpenAIAPI(
@@ -456,7 +480,7 @@ async function callApi(prompt: string, kind: string): Promise<string> {
         activeModel.apiKey,
         activeModel.baseUrl,
         activeModel.model,
-        activeModel.type === "custom",
+        activeModel.type,
         kind
       );
     } else {
@@ -476,6 +500,32 @@ async function callApi(prompt: string, kind: string): Promise<string> {
 
 // Non-streaming message listener (kept for backward compatibility)
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === "recordTokenUsage") {
+    const usage = message.usage;
+    if (
+      !usage ||
+      typeof usage.date !== "string" ||
+      typeof usage.model !== "string" ||
+      typeof usage.kind !== "string" ||
+      typeof usage.tokens !== "number" ||
+      !Number.isFinite(usage.tokens) ||
+      usage.tokens < 0
+    ) {
+      sendResponse({ success: false, error: "Invalid token usage data." });
+      return;
+    }
+
+    addTokenUsage(usage)
+      .then(() => sendResponse({ success: true }))
+      .catch((error) =>
+        sendResponse({
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      );
+    return true;
+  }
+
   if (message.action === "fixGrammar") {
     handleFixGrammar(message.text)
       .then((result) => sendResponse({ success: true, result }))
@@ -485,13 +535,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === "translate") {
     handleTranslate(message.text)
-      .then((result) => sendResponse({ success: true, result }))
-      .catch((error) => sendResponse({ success: false, error: error.message }));
-    return true; // Keep the message channel open for async response
-  }
-
-  if (message.action === "enhancePrompt") {
-    handleEnhancePrompt(message.text)
       .then((result) => sendResponse({ success: true, result }))
       .catch((error) => sendResponse({ success: false, error: error.message }));
     return true; // Keep the message channel open for async response
@@ -521,7 +564,8 @@ chrome.runtime.onConnect.addListener((port) => {
   if (port.name !== "ainput-stream") return;
 
   port.onMessage.addListener(async (message) => {
-    const { action, text, pageContent } = message;
+    const { action, text, pageContent, customPrompt, customActionName } =
+      message as StreamPromptData & { action: StreamAction };
 
     try {
       let prompt: string;
@@ -529,23 +573,28 @@ chrome.runtime.onConnect.addListener((port) => {
 
       switch (action) {
         case "fixGrammar":
-          prompt = `Fix the grammar and spelling in the following text. Return ONLY the corrected text without any explanations or additional comments:\n\n${text}`;
+          prompt = buildActionPrompt("fixGrammar", { text });
           kind = "fixGrammar";
           break;
         case "translate": {
           const settings = await chrome.storage.sync.get(["targetLanguage"]);
           const targetLanguage = settings.targetLanguage || "English";
-          prompt = `Translate the following text to ${targetLanguage}. Return ONLY the translated text without any explanations or additional comments:\n\n${text}`;
+          prompt = buildActionPrompt("translate", { text }, targetLanguage);
           kind = "translate";
           break;
         }
-        case "enhancePrompt":
-          prompt = `Enhance the following prompt to be more detailed and effective for large language models. Return ONLY the enhanced prompt without any explanations or additional comments:\n\n${text}`;
-          kind = "enhancePrompt";
-          break;
         case "autoReply":
-          prompt = `Based on the following page content, generate a concise and relevant reply. The reply should be suitable for a comment or a short message. Return only the suggested reply, without any introductory phrases like "Here's a reply:" or any other explanations.\n\nPage Content:\n"""\n${pageContent}\n"""\n\nSuggested Reply:`;
+          prompt = buildActionPrompt("autoReply", { pageContent });
           kind = "autoReply";
+          break;
+        case "customAction":
+          if (!customPrompt?.trim()) {
+            throw new Error("This custom action does not have a prompt.");
+          }
+          prompt = buildActionPrompt("customAction", { text, customPrompt });
+          kind = customActionName?.trim()
+            ? `custom: ${customActionName.trim().slice(0, 40)}`
+            : "customAction";
           break;
         default:
           port.postMessage({
@@ -586,12 +635,6 @@ async function handleTranslate(text: string): Promise<string> {
   const prompt = `Translate the following text to ${targetLanguage}. Return ONLY the translated text without any explanations or additional comments:\n\n${text}`;
 
   return await callApi(prompt, "translate");
-}
-
-async function handleEnhancePrompt(text: string): Promise<string> {
-  const prompt = `Enhance the following prompt to be more detailed and effective for large language models. Return ONLY the enhanced prompt without any explanations or additional comments:\n\n${text}`;
-
-  return await callApi(prompt, "enhancePrompt");
 }
 
 async function handleAutoReply(pageContent: string): Promise<string> {

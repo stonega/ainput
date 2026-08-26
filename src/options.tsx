@@ -10,22 +10,48 @@ import {
   FaCog,
   FaChartBar,
   FaCheckCircle,
+  FaEdit,
+  FaDownload,
   FaExclamationCircle,
+  FaMicrochip,
+  FaSave,
   FaTimes,
   FaStar,
+  FaBolt,
 } from "react-icons/fa";
 import { getTokenUsage } from "./db";
 import { theme, GlobalStyles } from "./theme";
+import {
+  ChromeAIAvailability,
+  getChromeAIAvailability,
+  setupChromeAI,
+} from "./chrome-ai";
+import {
+  CustomAction,
+  CustomActionInputSource,
+  CUSTOM_ACTION_INPUT_TOKEN,
+  MAX_CUSTOM_ACTIONS,
+  normalizeCustomActions,
+  validateCustomActions,
+} from "./custom-actions";
 
 // --- Types ---
 
 const FREE_OPENROUTER_API_KEY = process.env.FREE_OPENROUTER_API_KEY || "";
 
+type ConfigurableModelType =
+  | "gemini"
+  | "openai"
+  | "openrouter"
+  | "deepseek"
+  | "custom";
+type ModelType = ConfigurableModelType | "chrome";
+
 interface Model {
   id: string;
   name: string;
   apiKey: string;
-  type: "gemini" | "openai" | "openrouter" | "custom";
+  type: ModelType;
   baseUrl?: string;
   model?: string;
 }
@@ -37,6 +63,131 @@ interface TokenUsage {
   kind: string;
   tokens: number;
 }
+
+type CustomActionDraft = Pick<CustomAction, "name" | "prompt" | "inputSource">;
+
+const createEmptyCustomActionDraft = (): CustomActionDraft => ({
+  name: "",
+  prompt: "",
+  inputSource: "input",
+});
+
+const CHROME_AI_MODEL_ID = "chrome-built-in-ai";
+const CHROME_AI_MODEL: Model = {
+  id: CHROME_AI_MODEL_ID,
+  name: "Chrome Built-in AI",
+  apiKey: "",
+  type: "chrome",
+  model: "gemini-nano",
+};
+
+const createFreeModels = (): Model[] => [
+  {
+    id: "grok-free",
+    name: "Grok 4.1 Fast (Free)",
+    apiKey: FREE_OPENROUTER_API_KEY,
+    type: "openrouter",
+    baseUrl: "https://openrouter.ai/api",
+    model: "x-ai/grok-4.1-fast:free",
+  },
+  {
+    id: "gpt-oss-free",
+    name: "GPT OSS 20B (Free)",
+    apiKey: FREE_OPENROUTER_API_KEY,
+    type: "openrouter",
+    baseUrl: "https://openrouter.ai/api",
+    model: "openai/gpt-oss-20b:free",
+  },
+  {
+    id: "deepseek-r1-free",
+    name: "DeepSeek R1 (Free)",
+    apiKey: FREE_OPENROUTER_API_KEY,
+    type: "openrouter",
+    baseUrl: "https://openrouter.ai/api",
+    model: "deepseek/deepseek-r1-0528:free",
+  },
+];
+
+const MODEL_PROVIDERS: Array<{
+  value: ConfigurableModelType;
+  label: string;
+}> = [
+  { value: "gemini", label: "Google Gemini" },
+  { value: "openai", label: "OpenAI" },
+  { value: "openrouter", label: "OpenRouter" },
+  { value: "deepseek", label: "DeepSeek" },
+  { value: "custom", label: "Custom (OpenAI Compatible)" },
+];
+
+const getBaseUrlForProvider = (
+  type: ModelType,
+  currentBaseUrl = ""
+): string | undefined => {
+  if (type === "openai") return "https://api.openai.com";
+  if (type === "openrouter") return "https://openrouter.ai/api";
+  if (type === "deepseek") return "https://api.deepseek.com";
+  if (type === "custom") {
+    const isKnownProviderUrl =
+      currentBaseUrl === "https://api.openai.com" ||
+      currentBaseUrl === "https://openrouter.ai/api" ||
+      currentBaseUrl === "https://api.deepseek.com";
+    return isKnownProviderUrl ? "" : currentBaseUrl;
+  }
+  return undefined;
+};
+
+const normalizeModel = (model: Model): Model => ({
+  ...model,
+  name: model.name.trim(),
+  apiKey: model.type === "chrome" ? "" : model.apiKey.trim(),
+  baseUrl: getBaseUrlForProvider(model.type, model.baseUrl?.trim()),
+  model:
+    model.type === "chrome"
+      ? "gemini-nano"
+      : model.model?.trim() ||
+        (model.type === "gemini"
+          ? "gemini-2.5-flash"
+          : model.type === "deepseek"
+          ? "deepseek-v4-pro"
+          : ""),
+});
+
+const validateModel = (model: Model): string | null => {
+  if (!model.name) return "Model name is required.";
+  if (model.type === "chrome") return null;
+  if (!model.apiKey) return "API key is required.";
+  if (!model.model) return "Model ID is required.";
+
+  if (model.type === "custom") {
+    if (!model.baseUrl) return "Base URL is required for custom models.";
+
+    try {
+      const url = new URL(model.baseUrl);
+      if (url.protocol !== "http:" && url.protocol !== "https:") {
+        return "Base URL must use HTTP or HTTPS.";
+      }
+    } catch {
+      return "Enter a valid Base URL.";
+    }
+  }
+
+  return null;
+};
+
+const setSyncStorage = (items: Record<string, unknown>): Promise<void> =>
+  new Promise((resolve, reject) => {
+    chrome.storage.sync.set(items, () => {
+      if (chrome.runtime.lastError) {
+        reject(
+          new Error(
+            chrome.runtime.lastError.message || "Unable to save settings."
+          )
+        );
+        return;
+      }
+      resolve();
+    });
+  });
 
 const Input = (props: React.InputHTMLAttributes<HTMLInputElement>) => (
   <input
@@ -74,6 +225,27 @@ const Select = (props: React.SelectHTMLAttributes<HTMLSelectElement>) => (
   </select>
 );
 
+const Textarea = (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => (
+  <textarea
+    {...props}
+    className="input-focus transition-all"
+    style={{
+      width: "100%",
+      minHeight: "132px",
+      resize: "vertical",
+      padding: "10px 12px",
+      fontFamily: "inherit",
+      fontSize: "14px",
+      lineHeight: 1.5,
+      border: `1px solid ${theme.colors.border}`,
+      borderRadius: theme.borderRadius.md,
+      backgroundColor: theme.colors.inputBg,
+      color: theme.colors.text,
+      ...props.style,
+    }}
+  />
+);
+
 const Button = ({
   variant = "primary",
   ...props
@@ -104,7 +276,7 @@ const Button = ({
   />
 );
 
-const Options = () => {
+export const Options = () => {
   // --- State ---
   const [models, setModels] = useState<Model[]>([]);
   const [activeModelId, setActiveModelId] = useState<string | null>(null);
@@ -112,13 +284,22 @@ const Options = () => {
     "models"
   );
 
-  const [newModelType, setNewModelType] = useState<
-    "gemini" | "openai" | "openrouter" | "custom"
-  >("gemini");
+  const [newModelType, setNewModelType] =
+    useState<ConfigurableModelType>("gemini");
   const [newModelName, setNewModelName] = useState<string>("");
   const [newModelApiKey, setNewModelApiKey] = useState<string>("");
   const [newModelBaseUrl, setNewModelBaseUrl] = useState<string>("");
   const [newModelString, setNewModelString] = useState<string>("");
+  const [editingModelId, setEditingModelId] = useState<string | null>(null);
+  const [editingModel, setEditingModel] = useState<Model | null>(null);
+  const [modelsLoaded, setModelsLoaded] = useState(false);
+  const [chromeAIAvailability, setChromeAIAvailability] = useState<
+    ChromeAIAvailability | "checking"
+  >("checking");
+  const [chromeAISetupInProgress, setChromeAISetupInProgress] = useState(false);
+  const [chromeAIDownloadProgress, setChromeAIDownloadProgress] = useState<
+    number | null
+  >(null);
 
   const [targetLanguage, setTargetLanguage] = useState<string>("English");
   const [settingsStatus, setSettingsStatus] = useState<{
@@ -126,6 +307,13 @@ const Options = () => {
     type: "success" | "error";
   } | null>(null);
   const [disabledSites, setDisabledSites] = useState<string[]>([]);
+  const [customActions, setCustomActions] = useState<CustomAction[]>([]);
+  const [customActionDraft, setCustomActionDraft] = useState<CustomActionDraft>(
+    createEmptyCustomActionDraft
+  );
+  const [editingCustomActionId, setEditingCustomActionId] = useState<
+    string | null
+  >(null);
 
   const [usageData, setUsageData] = useState<TokenUsage[]>([]);
   const [usagePage, setUsagePage] = useState<number>(1);
@@ -134,63 +322,97 @@ const Options = () => {
 
   // --- Effects ---
   useEffect(() => {
+    let cancelled = false;
+
     chrome.storage.sync.get(
       {
         apiKey: "", // For migration
         models: [],
         activeModelId: null,
+        modelsInitialized: false,
         targetLanguage: "English",
         disabledSites: [],
+        customActions: [],
       },
-      (items) => {
-        if (items.models && items.models.length > 0) {
-          setModels(items.models);
-          setActiveModelId(items.activeModelId);
-        } else {
-          // Migration or Fresh Install
-          const freeModels: Model[] = [
-            {
-              id: "grok-free",
-              name: "Grok 4.1 Fast (Free)",
-              apiKey: FREE_OPENROUTER_API_KEY,
-              type: "openrouter",
-              baseUrl: "https://openrouter.ai/api",
-              model: "x-ai/grok-4.1-fast:free",
-            },
-            {
-              id: "gpt-oss-free",
-              name: "GPT OSS 20B (Free)",
-              apiKey: FREE_OPENROUTER_API_KEY,
-              type: "openrouter",
-              baseUrl: "https://openrouter.ai/api",
-              model: "openai/gpt-oss-20b:free",
-            },
-            {
-              id: "deepseek-r1-free",
-              name: "DeepSeek R1 (Free)",
-              apiKey: FREE_OPENROUTER_API_KEY,
-              type: "openrouter",
-              baseUrl: "https://openrouter.ai/api",
-              model: "deepseek/deepseek-r1-0528:free",
-            },
-          ];
+      async (items) => {
+        let availability: ChromeAIAvailability = "unsupported";
+        try {
+          availability = await getChromeAIAvailability();
+        } catch {
+          availability = "unsupported";
+        }
 
-          const initialModels = [...freeModels];
+        if (cancelled) return;
+        setChromeAIAvailability(availability);
+
+        if (items.models && items.models.length > 0) {
+          const storedModels = items.models as Model[];
+          const storedActiveModelExists = storedModels.some(
+            (model) => model.id === items.activeModelId
+          );
+          const storedActiveModel = storedModels.find(
+            (model) => model.id === items.activeModelId
+          );
+          const chromeAINotReady =
+            storedActiveModel?.type === "chrome" &&
+            availability !== "available";
+          const fallbackModel = storedModels.find(
+            (model) => model.type !== "chrome"
+          );
+          const nextActiveModelId = chromeAINotReady
+            ? fallbackModel?.id || null
+            : storedActiveModelExists
+            ? items.activeModelId
+            : storedModels[0].id;
+
+          setModels(storedModels);
+          setActiveModelId(nextActiveModelId);
+
+          if (
+            !items.modelsInitialized ||
+            !storedActiveModelExists ||
+            chromeAINotReady
+          ) {
+            chrome.storage.sync.set({
+              modelsInitialized: true,
+              activeModelId: nextActiveModelId,
+            });
+          }
+        } else if (!items.modelsInitialized) {
+          const freeModels = createFreeModels();
+          const canOfferChromeAI =
+            availability !== "unsupported" && availability !== "unavailable";
+          const initialModels = canOfferChromeAI
+            ? [{ ...CHROME_AI_MODEL }, ...freeModels]
+            : freeModels;
+          const initialActiveId =
+            availability === "available"
+              ? CHROME_AI_MODEL_ID
+              : freeModels[0]?.id || null;
 
           setModels(initialModels);
-          const initialActiveId = freeModels[0].id;
           setActiveModelId(initialActiveId);
-
           chrome.storage.sync.set({
             models: initialModels,
             activeModelId: initialActiveId,
+            modelsInitialized: true,
             apiKey: "",
           });
+        } else {
+          setModels([]);
+          setActiveModelId(null);
         }
+
         setTargetLanguage(items.targetLanguage);
         setDisabledSites(items.disabledSites);
+        setCustomActions(normalizeCustomActions(items.customActions));
+        setModelsLoaded(true);
       }
     );
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -222,39 +444,20 @@ const Options = () => {
   };
 
   const addModel = () => {
-    if (!newModelName.trim() || !newModelApiKey.trim()) {
-      showStatus("Model Name and API Key are required.", "error");
+    const newModel = normalizeModel({
+      id: `model-${Date.now()}`,
+      name: newModelName,
+      apiKey: newModelApiKey,
+      type: newModelType,
+      baseUrl: newModelBaseUrl,
+      model: newModelString,
+    });
+
+    const validationError = validateModel(newModel);
+    if (validationError) {
+      showStatus(validationError, "error");
       return;
     }
-
-    let modelString = newModelString.trim();
-    if (newModelType === "gemini" && !modelString) {
-      modelString = "gemini-2.5-flash";
-    }
-
-    if (newModelType === "openai") {
-      if (!newModelBaseUrl.trim() || !modelString) {
-        showStatus(
-          "Base URL and Model String are required for OpenAI models.",
-          "error"
-        );
-        return;
-      }
-    }
-
-    const newModel: Model = {
-      id: `model-${Date.now()}`,
-      name: newModelName.trim(),
-      apiKey: newModelApiKey.trim(),
-      type: newModelType,
-      baseUrl:
-        newModelType === "openai"
-          ? "https://api.openai.com"
-          : newModelType === "openrouter"
-          ? "https://openrouter.ai/api"
-          : newModelBaseUrl.trim(),
-      model: modelString,
-    };
 
     const updatedModels = [...models, newModel];
     setModels(updatedModels);
@@ -264,9 +467,13 @@ const Options = () => {
       chrome.storage.sync.set({
         models: updatedModels,
         activeModelId: newModel.id,
+        modelsInitialized: true,
       });
     } else {
-      chrome.storage.sync.set({ models: updatedModels });
+      chrome.storage.sync.set({
+        models: updatedModels,
+        modelsInitialized: true,
+      });
     }
 
     setNewModelName("");
@@ -274,6 +481,95 @@ const Options = () => {
     setNewModelBaseUrl("");
     setNewModelString("");
     showStatus("Model added successfully!");
+  };
+
+  const startEditingModel = (model: Model) => {
+    setEditingModelId(model.id);
+    setEditingModel({ ...model });
+  };
+
+  const cancelEditingModel = () => {
+    setEditingModelId(null);
+    setEditingModel(null);
+  };
+
+  const updateEditingModel = (updates: Partial<Model>) => {
+    setEditingModel((currentModel) =>
+      currentModel ? { ...currentModel, ...updates } : currentModel
+    );
+  };
+
+  const saveEditedModel = () => {
+    if (!editingModel) return;
+
+    const normalizedModel = normalizeModel(editingModel);
+    const validationError = validateModel(normalizedModel);
+    if (validationError) {
+      showStatus(validationError, "error");
+      return;
+    }
+
+    const updatedModels = models.map((model) =>
+      model.id === normalizedModel.id ? normalizedModel : model
+    );
+
+    chrome.storage.sync.set(
+      { models: updatedModels, modelsInitialized: true },
+      () => {
+        if (chrome.runtime.lastError) {
+          showStatus(
+            chrome.runtime.lastError.message || "Unable to save the model.",
+            "error"
+          );
+          return;
+        }
+
+        setModels(updatedModels);
+        cancelEditingModel();
+        showStatus("Model updated successfully!");
+      }
+    );
+  };
+
+  const enableChromeAI = async () => {
+    if (chromeAISetupInProgress) return;
+
+    setChromeAISetupInProgress(true);
+    setChromeAIDownloadProgress(null);
+
+    try {
+      await setupChromeAI((progress) => {
+        setChromeAIDownloadProgress(Math.max(0, Math.min(1, progress)));
+      });
+
+      const chromeModelConfigured = models.some(
+        (model) => model.id === CHROME_AI_MODEL_ID
+      );
+      const updatedModels = chromeModelConfigured
+        ? models
+        : [{ ...CHROME_AI_MODEL }, ...models];
+
+      await setSyncStorage({
+        models: updatedModels,
+        activeModelId: CHROME_AI_MODEL_ID,
+        modelsInitialized: true,
+      });
+
+      setModels(updatedModels);
+      setActiveModelId(CHROME_AI_MODEL_ID);
+      setChromeAIAvailability("available");
+      setChromeAIDownloadProgress(1);
+      showStatus("Chrome Built-in AI is ready to use!");
+    } catch (error) {
+      showStatus(
+        error instanceof Error
+          ? error.message
+          : "Unable to set up Chrome Built-in AI.",
+        "error"
+      );
+    } finally {
+      setChromeAISetupInProgress(false);
+    }
   };
 
   const deleteModel = (id: string) => {
@@ -286,14 +582,28 @@ const Options = () => {
       setActiveModelId(newActiveModelId);
     }
 
+    if (editingModelId === id) {
+      cancelEditingModel();
+    }
+
     chrome.storage.sync.set({
       models: updatedModels,
       activeModelId: newActiveModelId,
+      modelsInitialized: true,
     });
     showStatus("Model deleted successfully!");
   };
 
   const handleSetActiveModel = (id: string) => {
+    const selectedModel = models.find((model) => model.id === id);
+    if (
+      selectedModel?.type === "chrome" &&
+      chromeAIAvailability !== "available"
+    ) {
+      void enableChromeAI();
+      return;
+    }
+
     setActiveModelId(id);
     chrome.storage.sync.set({ activeModelId: id });
   };
@@ -306,10 +616,94 @@ const Options = () => {
     });
   };
 
+  const resetCustomActionEditor = () => {
+    setEditingCustomActionId(null);
+    setCustomActionDraft(createEmptyCustomActionDraft());
+  };
+
+  const saveCustomAction = async () => {
+    const action: CustomAction = {
+      id:
+        editingCustomActionId ||
+        `custom-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      name: customActionDraft.name.trim(),
+      prompt: customActionDraft.prompt.trim(),
+      inputSource: customActionDraft.inputSource,
+    };
+    const updatedActions = editingCustomActionId
+      ? customActions.map((currentAction) =>
+          currentAction.id === editingCustomActionId ? action : currentAction
+        )
+      : [...customActions, action];
+    const validationError = validateCustomActions(updatedActions);
+
+    if (validationError) {
+      showStatus(validationError, "error");
+      return;
+    }
+
+    try {
+      await setSyncStorage({ customActions: updatedActions });
+      setCustomActions(updatedActions);
+      resetCustomActionEditor();
+      showStatus(
+        editingCustomActionId
+          ? "Custom action updated!"
+          : "Custom action added!"
+      );
+    } catch (error) {
+      showStatus(
+        error instanceof Error
+          ? error.message
+          : "Unable to save the custom action.",
+        "error"
+      );
+    }
+  };
+
+  const editCustomAction = (action: CustomAction) => {
+    setEditingCustomActionId(action.id);
+    setCustomActionDraft({
+      name: action.name,
+      prompt: action.prompt,
+      inputSource: action.inputSource,
+    });
+  };
+
+  const deleteCustomAction = async (id: string) => {
+    const updatedActions = customActions.filter((action) => action.id !== id);
+
+    try {
+      await setSyncStorage({ customActions: updatedActions });
+      setCustomActions(updatedActions);
+      if (editingCustomActionId === id) resetCustomActionEditor();
+      showStatus("Custom action deleted.");
+    } catch (error) {
+      showStatus(
+        error instanceof Error
+          ? error.message
+          : "Unable to delete the custom action.",
+        "error"
+      );
+    }
+  };
+
   // --- Components ---
 
   const tabs = ["models", "settings", "usage"] as const;
   const activeIndex = tabs.indexOf(activeTab);
+  const chromeModelConfigured = models.some(
+    (model) => model.id === CHROME_AI_MODEL_ID
+  );
+  const chromeAIUnavailable =
+    chromeAIAvailability === "unsupported" ||
+    chromeAIAvailability === "unavailable";
+  const showChromeAISetup =
+    modelsLoaded &&
+    ((chromeAIAvailability === "available" && !chromeModelConfigured) ||
+      chromeAIAvailability === "downloadable" ||
+      chromeAIAvailability === "downloading" ||
+      (chromeAIUnavailable && chromeModelConfigured));
 
   const TabButton = ({
     id,
@@ -454,6 +848,212 @@ const Options = () => {
             <div
               style={{ display: "flex", flexDirection: "column", gap: "24px" }}
             >
+              {showChromeAISetup && (
+                <section
+                  aria-labelledby="chrome-ai-setup-title"
+                  style={{
+                    position: "relative",
+                    overflow: "hidden",
+                    backgroundColor: chromeAIUnavailable
+                      ? "#fffbeb"
+                      : "#f8fcff",
+                    borderRadius: theme.borderRadius.lg,
+                    padding: "24px",
+                    boxShadow: theme.shadows.sm,
+                    border: `1px solid ${
+                      chromeAIUnavailable ? "#fde68a" : "#bae6fd"
+                    }`,
+                  }}
+                >
+                  <div
+                    aria-hidden="true"
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      bottom: 0,
+                      width: "5px",
+                      background: chromeAIUnavailable
+                        ? "#f59e0b"
+                        : "linear-gradient(180deg, #00B1F2 0%, #62109F 100%)",
+                    }}
+                  />
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      justifyContent: "space-between",
+                      gap: "24px",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "flex-start",
+                        gap: "14px",
+                        flex: "1 1 360px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: "40px",
+                          height: "40px",
+                          borderRadius: theme.borderRadius.md,
+                          background: chromeAIUnavailable
+                            ? "#fef3c7"
+                            : "linear-gradient(145deg, #e0f2fe, #ede9fe)",
+                          color: chromeAIUnavailable ? "#92400e" : "#075985",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flex: "0 0 auto",
+                        }}
+                      >
+                        <FaMicrochip size={20} />
+                      </div>
+                      <div>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            flexWrap: "wrap",
+                            marginBottom: "6px",
+                          }}
+                        >
+                          <h2
+                            id="chrome-ai-setup-title"
+                            style={{
+                              margin: 0,
+                              fontSize: "18px",
+                              fontWeight: 700,
+                            }}
+                          >
+                            Chrome Built-in AI
+                          </h2>
+                          <span
+                            style={{
+                              padding: "3px 8px",
+                              borderRadius: theme.borderRadius.full,
+                              backgroundColor: chromeAIUnavailable
+                                ? "#fef3c7"
+                                : "#dcfce7",
+                              color: chromeAIUnavailable
+                                ? "#92400e"
+                                : "#166534",
+                              fontSize: "11px",
+                              fontWeight: 700,
+                              letterSpacing: "0.02em",
+                            }}
+                          >
+                            {chromeAIUnavailable
+                              ? "UNAVAILABLE HERE"
+                              : "RUNS ON THIS DEVICE"}
+                          </span>
+                        </div>
+                        <p
+                          style={{
+                            margin: 0,
+                            color: theme.colors.textSecondary,
+                            fontSize: "14px",
+                            lineHeight: 1.55,
+                            maxWidth: "540px",
+                          }}
+                        >
+                          {chromeAIUnavailable
+                            ? "This device doesn't meet Chrome's built-in AI requirements. Select another configured model to keep using AInput."
+                            : chromeAIAvailability === "available"
+                            ? "Gemini Nano is ready in Chrome. Use AInput without an API key or sending text to a server."
+                            : "Download Gemini Nano once, then use AInput privately and locally. Chrome manages the model and its updates."}
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      onClick={() => void enableChromeAI()}
+                      disabled={chromeAISetupInProgress || chromeAIUnavailable}
+                      aria-busy={chromeAISetupInProgress}
+                      style={{ flex: "0 0 auto" }}
+                    >
+                      {chromeAIUnavailable ? (
+                        <FaExclamationCircle size={14} />
+                      ) : chromeAIAvailability === "available" ? (
+                        <FaCheckCircle size={14} />
+                      ) : (
+                        <FaDownload size={14} />
+                      )}
+                      {chromeAIUnavailable
+                        ? "Unavailable"
+                        : chromeAISetupInProgress
+                        ? "Setting up…"
+                        : chromeAIAvailability === "available"
+                        ? "Use Built-in AI"
+                        : "Download & Use"}
+                    </Button>
+                  </div>
+
+                  {chromeAISetupInProgress && (
+                    <div style={{ marginTop: "18px" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          marginBottom: "7px",
+                          color: theme.colors.textSecondary,
+                          fontSize: "12px",
+                        }}
+                      >
+                        <span>
+                          {chromeAIDownloadProgress === 1
+                            ? "Preparing model…"
+                            : "Downloading model…"}
+                        </span>
+                        {chromeAIDownloadProgress !== null &&
+                          chromeAIDownloadProgress < 1 && (
+                            <span>
+                              {Math.round(chromeAIDownloadProgress * 100)}%
+                            </span>
+                          )}
+                      </div>
+                      <div
+                        role="progressbar"
+                        aria-label="Chrome AI model download"
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-valuenow={
+                          chromeAIDownloadProgress === null
+                            ? undefined
+                            : Math.round(chromeAIDownloadProgress * 100)
+                        }
+                        style={{
+                          height: "6px",
+                          overflow: "hidden",
+                          borderRadius: theme.borderRadius.full,
+                          backgroundColor: "#dbeafe",
+                        }}
+                      >
+                        <div
+                          className="transition-all"
+                          style={{
+                            height: "100%",
+                            width:
+                              chromeAIDownloadProgress === null
+                                ? "20%"
+                                : `${Math.max(
+                                    4,
+                                    chromeAIDownloadProgress * 100
+                                  )}%`,
+                            borderRadius: theme.borderRadius.full,
+                            background:
+                              "linear-gradient(90deg, #00B1F2, #62109F)",
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </section>
+              )}
+
               <div
                 style={{
                   backgroundColor: theme.colors.surface,
@@ -487,7 +1087,17 @@ const Options = () => {
                   </span>
                 </div>
 
-                {models.length === 0 ? (
+                {!modelsLoaded ? (
+                  <div
+                    style={{
+                      textAlign: "center",
+                      padding: "40px 0",
+                      color: theme.colors.textSecondary,
+                    }}
+                  >
+                    Checking available models…
+                  </div>
+                ) : models.length === 0 ? (
                   <div
                     style={{
                       textAlign: "center",
@@ -499,8 +1109,11 @@ const Options = () => {
                       size={48}
                       style={{ opacity: 0.2, marginBottom: "16px" }}
                     />
-                    <p>
-                      No models configured yet. Add one below to get started.
+                    <p style={{ marginBottom: 0 }}>
+                      {chromeAIAvailability === "unsupported" ||
+                      chromeAIAvailability === "unavailable"
+                        ? "Built-in AI isn't available on this device. Add a model below to get started."
+                        : "No models configured yet. Set up Chrome Built-in AI above or add a model below."}
                     </p>
                   </div>
                 ) : (
@@ -516,10 +1129,6 @@ const Options = () => {
                         key={model.id}
                         className="transition-all"
                         style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          padding: "16px",
                           borderRadius: theme.borderRadius.md,
                           border:
                             activeModelId === model.id
@@ -527,108 +1136,390 @@ const Options = () => {
                               : `1px solid ${theme.colors.border}`,
                           backgroundColor:
                             activeModelId === model.id ? "#eff6ff" : "white",
+                          overflow: "hidden",
                         }}
                       >
                         <div
                           style={{
                             display: "flex",
                             alignItems: "center",
+                            justifyContent: "space-between",
                             gap: "16px",
+                            padding: "16px",
                           }}
                         >
                           <div
                             style={{
-                              position: "relative",
-                              width: "20px",
-                              height: "20px",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "16px",
+                              minWidth: 0,
                             }}
                           >
-                            <input
-                              type="radio"
-                              id={`model-${model.id}`}
-                              name="activeModel"
-                              checked={activeModelId === model.id}
-                              onChange={() => handleSetActiveModel(model.id)}
-                              style={{
-                                width: "100%",
-                                height: "100%",
-                                cursor: "pointer",
-                                opacity: 0,
-                                position: "absolute",
-                                zIndex: 1,
-                              }}
-                            />
                             <div
                               style={{
+                                position: "relative",
                                 width: "20px",
                                 height: "20px",
-                                borderRadius: "50%",
-                                border: `2px solid ${
-                                  activeModelId === model.id
-                                    ? theme.colors.primary
-                                    : theme.colors.textSecondary
-                                }`,
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
+                                flex: "0 0 auto",
                               }}
                             >
-                              {activeModelId === model.id && (
-                                <div
-                                  style={{
-                                    width: "10px",
-                                    height: "10px",
-                                    borderRadius: "50%",
-                                    backgroundColor: theme.colors.primary,
-                                  }}
-                                />
-                              )}
+                              <input
+                                type="radio"
+                                id={`model-${model.id}`}
+                                name="activeModel"
+                                checked={activeModelId === model.id}
+                                onChange={() => handleSetActiveModel(model.id)}
+                                disabled={
+                                  model.type === "chrome" && chromeAIUnavailable
+                                }
+                                style={{
+                                  width: "100%",
+                                  height: "100%",
+                                  cursor:
+                                    model.type === "chrome" &&
+                                    chromeAIUnavailable
+                                      ? "not-allowed"
+                                      : "pointer",
+                                  opacity: 0,
+                                  position: "absolute",
+                                  zIndex: 1,
+                                }}
+                              />
+                              <div
+                                style={{
+                                  width: "20px",
+                                  height: "20px",
+                                  borderRadius: "50%",
+                                  border: `2px solid ${
+                                    activeModelId === model.id
+                                      ? theme.colors.primary
+                                      : theme.colors.textSecondary
+                                  }`,
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                }}
+                              >
+                                {activeModelId === model.id && (
+                                  <div
+                                    style={{
+                                      width: "10px",
+                                      height: "10px",
+                                      borderRadius: "50%",
+                                      backgroundColor: theme.colors.primary,
+                                    }}
+                                  />
+                                )}
+                              </div>
+                            </div>
+                            <div style={{ minWidth: 0 }}>
+                              <label
+                                htmlFor={`model-${model.id}`}
+                                style={{
+                                  display: "block",
+                                  fontWeight: 600,
+                                  cursor:
+                                    model.type === "chrome" &&
+                                    chromeAIUnavailable
+                                      ? "not-allowed"
+                                      : "pointer",
+                                  color: theme.colors.text,
+                                  overflowWrap: "anywhere",
+                                }}
+                              >
+                                {model.name}
+                              </label>
+                              <span
+                                style={{
+                                  display: "block",
+                                  fontSize: "12px",
+                                  color: theme.colors.textSecondary,
+                                  overflowWrap: "anywhere",
+                                }}
+                              >
+                                {model.type === "chrome"
+                                  ? "CHROME • Gemini Nano • On-device"
+                                  : `${model.type.toUpperCase()} • ${
+                                      model.model || "Default"
+                                    }`}
+                              </span>
                             </div>
                           </div>
-                          <div>
-                            <label
-                              htmlFor={`model-${model.id}`}
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "4px",
+                              flex: "0 0 auto",
+                            }}
+                          >
+                            {model.type !== "chrome" && (
+                              <button
+                                className="btn-icon transition-all"
+                                onClick={() => startEditingModel(model)}
+                                title="Edit Model"
+                                aria-label={`Edit ${model.name}`}
+                                style={{
+                                  border: "none",
+                                  background: "transparent",
+                                  color:
+                                    editingModelId === model.id
+                                      ? theme.colors.primary
+                                      : theme.colors.textSecondary,
+                                  cursor: "pointer",
+                                  padding: "8px",
+                                  borderRadius: "50%",
+                                  display: "flex",
+                                }}
+                              >
+                                <FaEdit />
+                              </button>
+                            )}
+                            <button
+                              className="btn-danger transition-all"
+                              onClick={() => deleteModel(model.id)}
+                              title="Delete Model"
+                              aria-label={`Delete ${model.name}`}
                               style={{
-                                display: "block",
-                                fontWeight: 600,
-                                cursor: "pointer",
-                                color: theme.colors.text,
-                              }}
-                            >
-                              {model.name}
-                            </label>
-                            <span
-                              style={{
-                                fontSize: "12px",
+                                border: "none",
+                                background: "transparent",
                                 color: theme.colors.textSecondary,
+                                cursor: "pointer",
+                                padding: "8px",
+                                borderRadius: "50%",
+                                display: "flex",
                               }}
                             >
-                              {model.type.toUpperCase()} •{" "}
-                              {model.model || "Default"}
-                            </span>
+                              <FaTrash />
+                            </button>
                           </div>
                         </div>
-                        <button
-                          className="btn-danger transition-all"
-                          onClick={() => deleteModel(model.id)}
-                          title="Delete Model"
-                          style={{
-                            border: "none",
-                            background: "transparent",
-                            color: theme.colors.textSecondary,
-                            cursor: "pointer",
-                            padding: "8px",
-                            borderRadius: "50%",
-                            display: "flex",
-                          }}
-                        >
-                          <FaTrash />
-                        </button>
+
+                        {model.type !== "chrome" &&
+                          editingModelId === model.id &&
+                          editingModel && (
+                            <form
+                              aria-label={`Edit ${model.name} settings`}
+                              onSubmit={(event) => {
+                                event.preventDefault();
+                                saveEditedModel();
+                              }}
+                              style={{
+                                padding: "20px",
+                                borderTop: `1px solid ${theme.colors.border}`,
+                                backgroundColor: theme.colors.surface,
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: "grid",
+                                  gridTemplateColumns:
+                                    "repeat(auto-fit, minmax(220px, 1fr))",
+                                  gap: "16px",
+                                }}
+                              >
+                                <div>
+                                  <label
+                                    htmlFor={`edit-provider-${model.id}`}
+                                    style={{
+                                      display: "block",
+                                      marginBottom: "8px",
+                                      fontWeight: 500,
+                                      fontSize: "14px",
+                                    }}
+                                  >
+                                    Provider
+                                  </label>
+                                  <Select
+                                    id={`edit-provider-${model.id}`}
+                                    value={editingModel.type}
+                                    onChange={(event) => {
+                                      const type = event.target
+                                        .value as ConfigurableModelType;
+                                      updateEditingModel({
+                                        type,
+                                        baseUrl: getBaseUrlForProvider(
+                                          type,
+                                          editingModel.baseUrl
+                                        ),
+                                        model:
+                                          type === "deepseek"
+                                            ? "deepseek-v4-pro"
+                                            : editingModel.type ===
+                                                "deepseek" &&
+                                              editingModel.model ===
+                                                "deepseek-v4-pro"
+                                            ? ""
+                                            : editingModel.model,
+                                      });
+                                    }}
+                                  >
+                                    {MODEL_PROVIDERS.map((provider) => (
+                                      <option
+                                        key={provider.value}
+                                        value={provider.value}
+                                      >
+                                        {provider.label}
+                                      </option>
+                                    ))}
+                                  </Select>
+                                </div>
+
+                                <div>
+                                  <label
+                                    htmlFor={`edit-name-${model.id}`}
+                                    style={{
+                                      display: "block",
+                                      marginBottom: "8px",
+                                      fontWeight: 500,
+                                      fontSize: "14px",
+                                    }}
+                                  >
+                                    Name
+                                  </label>
+                                  <Input
+                                    id={`edit-name-${model.id}`}
+                                    type="text"
+                                    value={editingModel.name}
+                                    onChange={(event) =>
+                                      updateEditingModel({
+                                        name: event.target.value,
+                                      })
+                                    }
+                                    autoFocus
+                                  />
+                                </div>
+
+                                <div>
+                                  <label
+                                    htmlFor={`edit-api-key-${model.id}`}
+                                    style={{
+                                      display: "block",
+                                      marginBottom: "8px",
+                                      fontWeight: 500,
+                                      fontSize: "14px",
+                                    }}
+                                  >
+                                    API Key
+                                  </label>
+                                  <Input
+                                    id={`edit-api-key-${model.id}`}
+                                    type="password"
+                                    value={editingModel.apiKey}
+                                    onChange={(event) =>
+                                      updateEditingModel({
+                                        apiKey: event.target.value,
+                                      })
+                                    }
+                                    autoComplete="off"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label
+                                    htmlFor={`edit-model-id-${model.id}`}
+                                    style={{
+                                      display: "block",
+                                      marginBottom: "8px",
+                                      fontWeight: 500,
+                                      fontSize: "14px",
+                                    }}
+                                  >
+                                    Model ID
+                                  </label>
+                                  <Input
+                                    id={`edit-model-id-${model.id}`}
+                                    type="text"
+                                    value={editingModel.model || ""}
+                                    onChange={(event) =>
+                                      updateEditingModel({
+                                        model: event.target.value,
+                                      })
+                                    }
+                                    placeholder={
+                                      editingModel.type === "openai"
+                                        ? "gpt-4.1-mini"
+                                        : editingModel.type === "openrouter"
+                                        ? "anthropic/claude-sonnet-4"
+                                        : editingModel.type === "deepseek"
+                                        ? "deepseek-v4-pro"
+                                        : editingModel.type === "gemini"
+                                        ? "gemini-2.5-flash"
+                                        : "provider/model-name"
+                                    }
+                                  />
+                                </div>
+
+                                {editingModel.type === "custom" && (
+                                  <div style={{ gridColumn: "1 / -1" }}>
+                                    <label
+                                      htmlFor={`edit-base-url-${model.id}`}
+                                      style={{
+                                        display: "block",
+                                        marginBottom: "8px",
+                                        fontWeight: 500,
+                                        fontSize: "14px",
+                                      }}
+                                    >
+                                      Base URL
+                                    </label>
+                                    <Input
+                                      id={`edit-base-url-${model.id}`}
+                                      type="url"
+                                      value={editingModel.baseUrl || ""}
+                                      onChange={(event) =>
+                                        updateEditingModel({
+                                          baseUrl: event.target.value,
+                                        })
+                                      }
+                                      placeholder="https://api.example.com"
+                                    />
+                                  </div>
+                                )}
+                              </div>
+
+                              <div
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "flex-end",
+                                  gap: "12px",
+                                  marginTop: "20px",
+                                }}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={cancelEditingModel}
+                                  className="hover-bg transition-all"
+                                  style={{
+                                    padding: "10px 16px",
+                                    border: `1px solid ${theme.colors.border}`,
+                                    borderRadius: theme.borderRadius.md,
+                                    backgroundColor: theme.colors.surface,
+                                    color: theme.colors.textSecondary,
+                                    cursor: "pointer",
+                                    fontSize: "14px",
+                                    fontWeight: 600,
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "8px",
+                                  }}
+                                >
+                                  <FaTimes size={12} /> Cancel
+                                </button>
+                                <Button type="submit">
+                                  <FaSave size={12} /> Save Changes
+                                </Button>
+                              </div>
+                            </form>
+                          )}
                       </div>
                     ))}
 
                     {!models.some(
-                      (m) => m.apiKey !== FREE_OPENROUTER_API_KEY
+                      (m) =>
+                        m.type === "chrome" ||
+                        m.apiKey !== FREE_OPENROUTER_API_KEY
                     ) && (
                       <div
                         style={{
@@ -678,7 +1569,7 @@ const Options = () => {
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
                     gap: "20px",
                   }}
                 >
@@ -695,12 +1586,24 @@ const Options = () => {
                     </label>
                     <Select
                       value={newModelType}
-                      onChange={(e) => setNewModelType(e.target.value as any)}
+                      onChange={(e) => {
+                        const type = e.target.value as ConfigurableModelType;
+                        setNewModelType(type);
+                        if (type === "deepseek") {
+                          setNewModelString("deepseek-v4-pro");
+                        } else if (
+                          newModelType === "deepseek" &&
+                          newModelString === "deepseek-v4-pro"
+                        ) {
+                          setNewModelString("");
+                        }
+                      }}
                     >
-                      <option value="gemini">Google Gemini</option>
-                      <option value="openai">OpenAI</option>
-                      <option value="openrouter">OpenRouter</option>
-                      <option value="custom">Custom (OpenAI Compatible)</option>
+                      {MODEL_PROVIDERS.map((provider) => (
+                        <option key={provider.value} value={provider.value}>
+                          {provider.label}
+                        </option>
+                      ))}
                     </Select>
                   </div>
 
@@ -758,13 +1661,14 @@ const Options = () => {
                         type="text"
                         value={newModelBaseUrl}
                         onChange={(e) => setNewModelBaseUrl(e.target.value)}
-                        placeholder="https://api.example.com/v1"
+                        placeholder="https://api.example.com"
                       />
                     </div>
                   )}
 
                   {(newModelType === "openai" ||
                     newModelType === "openrouter" ||
+                    newModelType === "deepseek" ||
                     newModelType === "custom" ||
                     newModelType === "gemini") && (
                     <div style={{ gridColumn: "1 / -1" }}>
@@ -787,6 +1691,8 @@ const Options = () => {
                             ? "gpt-4-turbo"
                             : newModelType === "openrouter"
                             ? "anthropic/claude-3-opus"
+                            : newModelType === "deepseek"
+                            ? "deepseek-v4-pro"
                             : newModelType === "gemini"
                             ? "gemini-2.5-flash"
                             : "llama-2-70b"
@@ -891,6 +1797,358 @@ const Options = () => {
                   <Button onClick={saveGeneralSettings}>Save Settings</Button>
                 </div>
               </div>
+
+              <section
+                aria-labelledby="custom-actions-title"
+                style={{
+                  backgroundColor: theme.colors.surface,
+                  borderRadius: theme.borderRadius.lg,
+                  padding: "24px",
+                  boxShadow: theme.shadows.sm,
+                  border: `1px solid ${theme.colors.border}`,
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    justifyContent: "space-between",
+                    gap: "16px",
+                    marginBottom: "20px",
+                  }}
+                >
+                  <div>
+                    <h2
+                      id="custom-actions-title"
+                      style={{ margin: "0 0 6px 0", fontSize: "18px" }}
+                    >
+                      Custom Actions
+                    </h2>
+                    <p
+                      style={{
+                        margin: 0,
+                        color: theme.colors.textSecondary,
+                        fontSize: "14px",
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      Add your own commands to the AINPUT menu. Each command
+                      opens a review modal before it runs.
+                    </p>
+                  </div>
+                  <span
+                    style={{
+                      flex: "0 0 auto",
+                      padding: "4px 9px",
+                      borderRadius: theme.borderRadius.full,
+                      backgroundColor: "#f3e8ff",
+                      color: "#6b21a8",
+                      fontSize: "12px",
+                      fontWeight: 700,
+                    }}
+                  >
+                    {customActions.length}/{MAX_CUSTOM_ACTIONS}
+                  </span>
+                </div>
+
+                {customActions.length > 0 && (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "10px",
+                      marginBottom: "24px",
+                    }}
+                  >
+                    {customActions.map((action) => (
+                      <div
+                        key={action.id}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: "16px",
+                          padding: "14px 14px 14px 16px",
+                          borderRadius: theme.borderRadius.md,
+                          border: `1px solid ${
+                            editingCustomActionId === action.id
+                              ? "#c4b5fd"
+                              : theme.colors.border
+                          }`,
+                          borderLeft: "4px solid #7c3aed",
+                          backgroundColor:
+                            editingCustomActionId === action.id
+                              ? "#faf5ff"
+                              : "#fff",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "12px",
+                            minWidth: 0,
+                          }}
+                        >
+                          <div
+                            aria-hidden="true"
+                            style={{
+                              width: "34px",
+                              height: "34px",
+                              borderRadius: theme.borderRadius.md,
+                              backgroundColor: "#f3e8ff",
+                              color: "#7c3aed",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              flex: "0 0 auto",
+                            }}
+                          >
+                            <FaBolt size={14} />
+                          </div>
+                          <div style={{ minWidth: 0 }}>
+                            <div
+                              style={{
+                                fontSize: "14px",
+                                fontWeight: 700,
+                                color: theme.colors.text,
+                                overflowWrap: "anywhere",
+                              }}
+                            >
+                              {action.name}
+                            </div>
+                            <div
+                              style={{
+                                marginTop: "3px",
+                                color: theme.colors.textSecondary,
+                                fontSize: "12px",
+                              }}
+                            >
+                              {action.inputSource === "input"
+                                ? "Uses the focused input"
+                                : "Uses page context"}
+                            </div>
+                          </div>
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "6px",
+                            flex: "0 0 auto",
+                          }}
+                        >
+                          <button
+                            type="button"
+                            aria-label={`Edit ${action.name}`}
+                            title={`Edit ${action.name}`}
+                            onClick={() => editCustomAction(action)}
+                            className="hover-bg transition-all"
+                            style={{
+                              width: "32px",
+                              height: "32px",
+                              border: "none",
+                              borderRadius: theme.borderRadius.md,
+                              backgroundColor: "transparent",
+                              color: theme.colors.textSecondary,
+                              cursor: "pointer",
+                            }}
+                          >
+                            <FaEdit size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`Delete ${action.name}`}
+                            title={`Delete ${action.name}`}
+                            onClick={() => void deleteCustomAction(action.id)}
+                            className="btn-danger transition-all"
+                            style={{
+                              width: "32px",
+                              height: "32px",
+                              border: "none",
+                              borderRadius: theme.borderRadius.md,
+                              backgroundColor: "transparent",
+                              color: theme.colors.danger,
+                              cursor: "pointer",
+                            }}
+                          >
+                            <FaTrash size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void saveCustomAction();
+                  }}
+                  style={{
+                    padding: "20px",
+                    borderRadius: theme.borderRadius.md,
+                    backgroundColor: "#f8fafc",
+                    border: `1px solid ${theme.colors.border}`,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "12px",
+                      marginBottom: "18px",
+                    }}
+                  >
+                    <h3 style={{ margin: 0, fontSize: "15px" }}>
+                      {editingCustomActionId
+                        ? "Edit custom action"
+                        : "Add custom action"}
+                    </h3>
+                    {editingCustomActionId && (
+                      <button
+                        type="button"
+                        onClick={resetCustomActionEditor}
+                        style={{
+                          border: "none",
+                          backgroundColor: "transparent",
+                          color: theme.colors.textSecondary,
+                          cursor: "pointer",
+                          fontSize: "13px",
+                          fontWeight: 600,
+                        }}
+                      >
+                        Cancel editing
+                      </button>
+                    )}
+                  </div>
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns:
+                        "repeat(auto-fit, minmax(220px, 1fr))",
+                      gap: "18px",
+                    }}
+                  >
+                    <div>
+                      <label
+                        htmlFor="custom-action-name"
+                        style={{
+                          display: "block",
+                          marginBottom: "8px",
+                          fontSize: "14px",
+                          fontWeight: 600,
+                        }}
+                      >
+                        Menu label
+                      </label>
+                      <Input
+                        id="custom-action-name"
+                        value={customActionDraft.name}
+                        onChange={(event) =>
+                          setCustomActionDraft((draft) => ({
+                            ...draft,
+                            name: event.target.value,
+                          }))
+                        }
+                        placeholder="e.g., Make concise"
+                        maxLength={40}
+                      />
+                    </div>
+                    <div>
+                      <label
+                        htmlFor="custom-action-source"
+                        style={{
+                          display: "block",
+                          marginBottom: "8px",
+                          fontSize: "14px",
+                          fontWeight: 600,
+                        }}
+                      >
+                        Input source
+                      </label>
+                      <Select
+                        id="custom-action-source"
+                        value={customActionDraft.inputSource}
+                        onChange={(event) =>
+                          setCustomActionDraft((draft) => ({
+                            ...draft,
+                            inputSource: event.target
+                              .value as CustomActionInputSource,
+                          }))
+                        }
+                      >
+                        <option value="input">Focused input text</option>
+                        <option value="pageContext">
+                          Page context (like Auto Reply)
+                        </option>
+                      </Select>
+                    </div>
+                    <div style={{ gridColumn: "1 / -1" }}>
+                      <label
+                        htmlFor="custom-action-prompt"
+                        style={{
+                          display: "block",
+                          marginBottom: "8px",
+                          fontSize: "14px",
+                          fontWeight: 600,
+                        }}
+                      >
+                        Custom prompt
+                      </label>
+                      <Textarea
+                        id="custom-action-prompt"
+                        value={customActionDraft.prompt}
+                        onChange={(event) =>
+                          setCustomActionDraft((draft) => ({
+                            ...draft,
+                            prompt: event.target.value,
+                          }))
+                        }
+                        placeholder={`Rewrite ${CUSTOM_ACTION_INPUT_TOKEN} as a concise, friendly response. Return only the response.`}
+                        maxLength={3000}
+                      />
+                      <p
+                        style={{
+                          margin: "8px 0 0",
+                          color: theme.colors.textSecondary,
+                          fontSize: "12px",
+                          lineHeight: 1.45,
+                        }}
+                      >
+                        Place <code>{CUSTOM_ACTION_INPUT_TOKEN}</code> where the
+                        selected input should appear. If omitted, AINPUT adds it
+                        after your prompt.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "flex-end",
+                      marginTop: "18px",
+                    }}
+                  >
+                    <Button
+                      type="submit"
+                      disabled={
+                        !editingCustomActionId &&
+                        customActions.length >= MAX_CUSTOM_ACTIONS
+                      }
+                    >
+                      {editingCustomActionId ? (
+                        <FaSave size={12} />
+                      ) : (
+                        <FaPlus size={12} />
+                      )}
+                      {editingCustomActionId ? "Save Action" : "Add Action"}
+                    </Button>
+                  </div>
+                </form>
+              </section>
 
               {disabledSites.length > 0 && (
                 <div
@@ -1159,10 +2417,13 @@ const Options = () => {
   );
 };
 
-const root = createRoot(document.getElementById("root")!);
+const rootElement = document.getElementById("root");
 
-root.render(
-  <React.StrictMode>
-    <Options />
-  </React.StrictMode>
-);
+if (rootElement) {
+  const root = createRoot(rootElement);
+  root.render(
+    <React.StrictMode>
+      <Options />
+    </React.StrictMode>
+  );
+}
