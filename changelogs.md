@@ -16,10 +16,16 @@ This changelog is organized by the extension version declared in
 
 - Updated the AInput extension release version to 1.8.
 - Refreshed the extension icon set and model-settings experience.
+- Consolidated the three hard-coded OpenRouter free presets into one managed
+  preset that refreshes from OpenRouter's models API and falls back to the
+  stable free-model router when the API is unavailable.
+- Redesigned the popup to match the settings page visual system and make the
+  current site's AInput status easier to scan with compact, text-only rows.
 
 ### Removed
 
 - Removed the Enhance Prompt menu action and its processing flow.
+- Removed the Auto-Reply site toggle from the popup.
 
 ## 1.7 - 2026-08-26
 

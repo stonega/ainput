@@ -1,165 +1,126 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { IoSettingsOutline } from "react-icons/io5";
-import {
-  FaPowerOff,
-  FaRobot,
-  FaExternalLinkAlt,
-  FaExclamationCircle,
-} from "react-icons/fa";
+import { FaExclamationCircle } from "react-icons/fa";
 import { theme, GlobalStyles } from "./theme";
 
-// --- Components ---
-
 interface ToggleSwitchProps {
-  label: string;
-  sublabel?: string;
   enabled: boolean;
   onToggle: () => void;
   disabled?: boolean;
-  icon?: React.ReactNode;
+  label: string;
 }
 
 const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
-  label,
-  sublabel,
   enabled,
   onToggle,
   disabled = false,
-  icon,
-}) => {
-  return (
-    <div
-      className="hover-bg"
-      onClick={disabled ? undefined : onToggle}
+  label,
+}) => (
+  <button
+    type="button"
+    role="switch"
+    aria-checked={enabled}
+    aria-label={label}
+    disabled={disabled}
+    onClick={onToggle}
+    className="popup-switch"
+    style={{
+      position: "relative",
+      width: "48px",
+      height: "28px",
+      padding: 0,
+      flex: "0 0 auto",
+      border: `1px solid ${enabled ? theme.colors.primary : "#cbd5e1"}`,
+      borderRadius: theme.borderRadius.full,
+      backgroundColor: enabled ? theme.colors.primary : "#cbd5e1",
+      cursor: disabled ? "not-allowed" : "pointer",
+      opacity: disabled ? 0.58 : 1,
+      transition: "background-color 180ms ease, border-color 180ms ease",
+    }}
+  >
+    <span
+      aria-hidden="true"
       style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "12px",
-        cursor: disabled ? "not-allowed" : "pointer",
-        opacity: disabled ? 0.6 : 1,
-        borderRadius: theme.borderRadius.md,
-        transition: "background-color 0.2s",
-        marginBottom: "8px",
+        position: "absolute",
+        top: "3px",
+        left: enabled ? "23px" : "3px",
+        width: "20px",
+        height: "20px",
+        borderRadius: "50%",
+        backgroundColor: theme.colors.surface,
+        boxShadow: "0 2px 5px rgba(15, 23, 42, 0.2)",
+        transition: "left 180ms ease",
       }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-        {icon && (
-          <div
-            style={{
-              color: enabled
-                ? theme.colors.primary
-                : theme.colors.textSecondary,
-              fontSize: "18px",
-              display: "flex",
-            }}
-          >
-            {icon}
-          </div>
-        )}
-        <div>
-          <div
-            style={{
-              fontSize: "14px",
-              fontWeight: 600,
-              color: theme.colors.text,
-            }}
-          >
-            {label}
-          </div>
-          {sublabel && (
-            <div
-              style={{
-                fontSize: "11px",
-                color: theme.colors.textSecondary,
-                marginTop: "2px",
-              }}
-            >
-              {sublabel}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div
-        style={{
-          position: "relative",
-          width: "44px",
-          height: "24px",
-          backgroundColor: enabled ? theme.colors.primary : "#cbd5e1",
-          borderRadius: "99px",
-          transition: "background-color 0.2s ease-in-out",
-          flexShrink: 0,
-        }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            top: "2px",
-            left: enabled ? "22px" : "2px",
-            width: "20px",
-            height: "20px",
-            backgroundColor: "white",
-            borderRadius: "50%",
-            transition: "left 0.2s ease-in-out",
-            boxShadow: "0 1px 2px rgba(0,0,0,0.2)",
-          }}
-        />
-      </div>
-    </div>
-  );
-};
+    />
+  </button>
+);
 
 export const Popup = () => {
   const [currentOrigin, setCurrentOrigin] = useState<string>();
   const [currentUrl, setCurrentUrl] = useState<string>();
   const [activeTabId, setActiveTabId] = useState<number>();
   const [isDisabled, setIsDisabled] = useState<boolean | null>(null);
-  const [isAutoReplyEnabled, setIsAutoReplyEnabled] = useState<boolean | null>(
-    null
-  );
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [toggleError, setToggleError] = useState<string | null>(null);
 
   useEffect(() => {
-    chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+    let mounted = true;
+
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (!mounted) return;
+
       const tab = tabs[0];
-      if (!tab || !tab.url) {
-        setCurrentOrigin(undefined);
-        setCurrentUrl(undefined);
-        setActiveTabId(undefined);
-        setIsDisabled(null);
-        setIsAutoReplyEnabled(null);
+      setCurrentUrl(tab?.url);
+
+      if (!tab?.url || tab.id === undefined) {
+        setIsLoading(false);
         return;
       }
-      setActiveTabId(tab.id);
-      setCurrentUrl(tab.url);
+
       try {
         const url = new URL(tab.url);
+        if (url.protocol !== "http:" && url.protocol !== "https:") {
+          setIsLoading(false);
+          return;
+        }
+
         const origin = url.origin;
+        setActiveTabId(tab.id);
         setCurrentOrigin(origin);
-        chrome.storage.sync.get(
-          ["disabledSites", "autoReplySites"],
-          (items) => {
-            const disabledSites: string[] = items.disabledSites || [];
-            setIsDisabled(disabledSites.includes(origin));
-            const autoReplySites: string[] = items.autoReplySites || [];
-            setIsAutoReplyEnabled(autoReplySites.includes(origin));
-          }
-        );
+
+        chrome.storage.sync.get(["disabledSites"], (items) => {
+          if (!mounted) return;
+          const disabledSites: string[] = items.disabledSites || [];
+          setIsDisabled(disabledSites.includes(origin));
+          setIsLoading(false);
+        });
       } catch (error) {
         console.error("Unable to parse tab URL:", error);
-        setCurrentOrigin(undefined);
-        setCurrentUrl(undefined);
-        setIsDisabled(null);
-        setIsAutoReplyEnabled(null);
+        setIsLoading(false);
       }
     });
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const handleToggleExtension = () => {
-    if (!currentOrigin || activeTabId === undefined || isDisabled === null)
+    if (
+      !currentOrigin ||
+      activeTabId === undefined ||
+      isDisabled === null ||
+      isSaving
+    ) {
       return;
+    }
+
     const nextDisabled = !isDisabled;
+    setIsSaving(true);
+    setToggleError(null);
+
     chrome.storage.sync.get(["disabledSites"], (items) => {
       const disabledSites = new Set<string>(items.disabledSites || []);
       if (nextDisabled) {
@@ -167,10 +128,16 @@ export const Popup = () => {
       } else {
         disabledSites.delete(currentOrigin);
       }
+
       chrome.storage.sync.set(
         { disabledSites: Array.from(disabledSites) },
         () => {
-          if (chrome.runtime.lastError) return;
+          setIsSaving(false);
+          if (chrome.runtime.lastError) {
+            setToggleError("Unable to update this site. Try again.");
+            return;
+          }
+
           setIsDisabled(nextDisabled);
           chrome.tabs.sendMessage(activeTabId, {
             action: "setExtensionEnabled",
@@ -181,204 +148,322 @@ export const Popup = () => {
     });
   };
 
-  const handleToggleAutoReply = () => {
-    if (
-      !currentOrigin ||
-      activeTabId === undefined ||
-      isAutoReplyEnabled === null
-    )
-      return;
-    const nextAutoReplyEnabled = !isAutoReplyEnabled;
-    chrome.storage.sync.get(["autoReplySites"], (items) => {
-      const autoReplySites = new Set<string>(items.autoReplySites || []);
-      if (nextAutoReplyEnabled) {
-        autoReplySites.add(currentOrigin);
-      } else {
-        autoReplySites.delete(currentOrigin);
-      }
-      chrome.storage.sync.set(
-        { autoReplySites: Array.from(autoReplySites) },
-        () => {
-          if (chrome.runtime.lastError) return;
-          setIsAutoReplyEnabled(nextAutoReplyEnabled);
-        }
-      );
-    });
-  };
-
   const openOptionsPage = () => {
     chrome.runtime.openOptionsPage();
   };
 
   const handleSubmitIssue = () => {
-    if (!currentUrl) return;
-    const title = `Report an issue on ${new URL(currentUrl).hostname}`;
+    const hostname = currentUrl ? new URL(currentUrl).hostname : "";
+    const title = hostname
+      ? `Report an issue on ${hostname}`
+      : "Report an issue";
     const url = `https://github.com/stonega/ainput/issues/new?title=${encodeURIComponent(
       title
     )}`;
     chrome.tabs.create({ url });
   };
 
-  const isLoading =
-    isDisabled === null || !currentOrigin || activeTabId === undefined;
+  const hostname = currentOrigin
+    ? new URL(currentOrigin).hostname.replace(/^www\./, "")
+    : "This browser page";
+  const isAvailable =
+    currentOrigin !== undefined &&
+    activeTabId !== undefined &&
+    isDisabled !== null;
+  const isEnabled = isAvailable && !isDisabled;
+
+  const statusTitle = isLoading
+    ? "Checking this site"
+    : !isAvailable
+    ? "Unavailable on this page"
+    : isEnabled
+    ? "Active on this site"
+    : "Paused on this site";
+
+  const statusDescription = isLoading
+    ? "Loading your site preferences…"
+    : !isAvailable
+    ? "Open a regular webpage to use AInput."
+    : isEnabled
+    ? "AI actions are ready in supported input fields."
+    : "AInput is hidden until you turn it back on.";
 
   return (
     <div
       style={{
-        padding: "16px",
-        minHeight: "200px",
+        width: "360px",
+        minHeight: "285px",
+        padding: "20px",
         display: "flex",
         flexDirection: "column",
+        backgroundColor: theme.colors.background,
       }}
     >
-      <GlobalStyles extraCss="width: 320px;" />
+      <GlobalStyles extraCss="width: 360px; min-width: 360px;" />
+      <style>{`
+        button { font: inherit; }
+        button:focus-visible {
+          outline: none;
+          box-shadow: 0 0 0 3px rgba(0, 177, 242, 0.2);
+        }
+        .popup-icon-button:hover {
+          color: ${theme.colors.primary} !important;
+          border-color: #bae6fd !important;
+          background: #f0f9ff !important;
+        }
+        .popup-link:hover {
+          color: ${theme.colors.primary} !important;
+          background: #e0f2fe !important;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .popup-switch, .popup-switch span { transition: none !important; }
+        }
+      `}</style>
 
-      {/* Header */}
       <header
         style={{
           display: "flex",
-          justifyContent: "space-between",
           alignItems: "center",
+          justifyContent: "space-between",
           marginBottom: "20px",
-          paddingBottom: "16px",
-          borderBottom: `1px solid ${theme.colors.border}`,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        <div>
           <h1
             style={{
-              fontSize: "18px",
-              fontWeight: 800,
-              color: theme.colors.primary,
               margin: 0,
+              color: theme.colors.text,
+              fontSize: "20px",
+              fontWeight: 800,
+              letterSpacing: "-0.04em",
             }}
           >
             AINPUT
           </h1>
+          <p
+            style={{
+              margin: "3px 0 0",
+              color: theme.colors.textSecondary,
+              fontSize: "11px",
+              fontWeight: 500,
+            }}
+          >
+            Make every input intelligent
+          </p>
         </div>
+
         <button
+          type="button"
           onClick={openOptionsPage}
-          className="btn-icon"
+          className="popup-icon-button"
+          aria-label="Open AInput settings"
+          title="Open AInput settings"
           style={{
-            background: "transparent",
-            border: "none",
-            cursor: "pointer",
-            padding: "8px",
-            borderRadius: "50%",
-            display: "flex",
+            width: "36px",
+            height: "36px",
+            padding: 0,
+            display: "grid",
+            placeItems: "center",
+            border: `1px solid ${theme.colors.border}`,
+            borderRadius: theme.borderRadius.md,
+            backgroundColor: theme.colors.surface,
             color: theme.colors.textSecondary,
-            transition: "all 0.2s",
+            cursor: "pointer",
+            boxShadow: theme.shadows.sm,
+            transition: "all 160ms ease",
           }}
-          title="Open Settings"
         >
-          <IoSettingsOutline size={20} />
+          <IoSettingsOutline size={19} />
         </button>
       </header>
 
-      {/* Content */}
-      <div style={{ flex: 1 }}>
-        <div
-          style={{
-            marginBottom: "16px",
-            fontSize: "13px",
-            color: theme.colors.textSecondary,
-          }}
-        >
-          Settings for{" "}
-          <strong style={{ color: theme.colors.text }}>
-            {new URL(currentOrigin || "http://localhost").hostname}
-          </strong>
-        </div>
-
-        {isLoading ? (
-          <div
-            style={{
-              textAlign: "center",
-              padding: "20px",
-              color: theme.colors.textSecondary,
-            }}
-          >
-            Loading...
-          </div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-            <ToggleSwitch
-              label={
-                !isDisabled ? "Enabled on this site" : "Disabled on this site"
-              }
-              sublabel={
-                !isDisabled ? "AINPUT is active" : "AINPUT is turned off"
-              }
-              enabled={!isDisabled}
-              onToggle={handleToggleExtension}
-              icon={<FaPowerOff />}
-            />
-
-            <ToggleSwitch
-              label="Auto-Reply"
-              sublabel="Automatically suggest replies"
-              enabled={isAutoReplyEnabled || false}
-              onToggle={handleToggleAutoReply}
-              disabled={isDisabled || false}
-              icon={<FaRobot />}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* Footer */}
-      <footer
+      <section
+        aria-label="Current site status"
         style={{
-          marginTop: "16px",
-          paddingTop: "12px",
-          borderTop: `1px solid ${theme.colors.border}`,
-          textAlign: "center",
+          position: "relative",
+          overflow: "hidden",
+          border: `1px solid ${theme.colors.border}`,
+          borderRadius: theme.borderRadius.xl,
+          backgroundColor: theme.colors.surface,
+          boxShadow: theme.shadows.sm,
         }}
       >
         <div
           style={{
+            padding: "10px 14px",
             display: "flex",
-            justifyContent: "space-between",
             alignItems: "center",
+            borderBottom: `1px solid ${theme.colors.border}`,
           }}
         >
-          <button
-            onClick={handleSubmitIssue}
-            className="btn-icon"
+          <div
             style={{
-              background: "none",
-              border: "none",
-              color: theme.colors.textSecondary,
-              fontSize: "13px",
-              fontWeight: 500,
-              cursor: "pointer",
-              display: "inline-flex",
+              minWidth: 0,
+              display: "flex",
               alignItems: "center",
-              gap: "6px",
-              padding: "8px",
-              borderRadius: theme.borderRadius.md,
-            }}
-            title="Submit an issue on GitHub"
-          >
-            <FaExclamationCircle size={13} /> Submit issue
-          </button>
-          <button
-            onClick={openOptionsPage}
-            style={{
-              background: "none",
-              border: "none",
-              color: theme.colors.primary,
-              fontSize: "13px",
-              fontWeight: 500,
-              cursor: "pointer",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "4px",
+              gap: "8px",
             }}
           >
-            More settings <FaExternalLinkAlt size={10} />
-          </button>
+            <span
+              style={{
+                color: theme.colors.textSecondary,
+                fontSize: "9px",
+                fontWeight: 700,
+                letterSpacing: "0.1em",
+                textTransform: "uppercase",
+                whiteSpace: "nowrap",
+              }}
+            >
+              Current site
+            </span>
+            <span
+              aria-hidden="true"
+              style={{
+                width: "3px",
+                height: "3px",
+                flex: "0 0 auto",
+                borderRadius: "50%",
+                backgroundColor: "#cbd5e1",
+              }}
+            />
+            <span
+              title={hostname}
+              style={{
+                overflow: "hidden",
+                color: theme.colors.text,
+                fontSize: "13px",
+                fontWeight: 650,
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {hostname}
+            </span>
+          </div>
         </div>
+
+        <div
+          style={{
+            padding: "16px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "16px",
+          }}
+        >
+          <div>
+            <div
+              style={{
+                color: theme.colors.text,
+                fontSize: "14px",
+                fontWeight: 700,
+                lineHeight: 1.25,
+              }}
+            >
+              {statusTitle}
+            </div>
+            <div
+              style={{
+                maxWidth: "220px",
+                marginTop: "4px",
+                color: theme.colors.textSecondary,
+                fontSize: "11px",
+                lineHeight: 1.45,
+              }}
+            >
+              {statusDescription}
+            </div>
+          </div>
+
+          <ToggleSwitch
+            label={
+              isEnabled
+                ? "Disable AInput on this site"
+                : "Enable AInput on this site"
+            }
+            enabled={isEnabled}
+            disabled={!isAvailable || isLoading || isSaving}
+            onToggle={handleToggleExtension}
+          />
+        </div>
+
+        {toggleError && (
+          <div
+            role="alert"
+            style={{
+              margin: "0 16px 16px",
+              padding: "9px 10px",
+              border: "1px solid #fecaca",
+              borderRadius: theme.borderRadius.md,
+              backgroundColor: "#fef2f2",
+              color: "#b91c1c",
+              fontSize: "11px",
+              fontWeight: 600,
+            }}
+          >
+            {toggleError}
+          </div>
+        )}
+      </section>
+
+      <footer
+        style={{
+          marginTop: "16px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        <button
+          type="button"
+          onClick={handleSubmitIssue}
+          className="popup-link"
+          style={{
+            padding: "8px 9px",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "6px",
+            border: "none",
+            borderRadius: theme.borderRadius.md,
+            background: "transparent",
+            color: theme.colors.textSecondary,
+            cursor: "pointer",
+            fontSize: "11px",
+            fontWeight: 600,
+            transition: "all 160ms ease",
+          }}
+        >
+          <FaExclamationCircle size={12} /> Report an issue
+        </button>
+
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "6px",
+            color: isEnabled
+              ? theme.colors.primary
+              : theme.colors.textSecondary,
+            fontSize: "10px",
+            fontWeight: 700,
+            letterSpacing: "0.04em",
+            textTransform: "uppercase",
+          }}
+        >
+          <span
+            aria-hidden="true"
+            style={{
+              width: "7px",
+              height: "7px",
+              borderRadius: "50%",
+              backgroundColor: isEnabled ? theme.colors.primary : "#94a3b8",
+              boxShadow: isEnabled
+                ? "0 0 0 3px rgba(0, 177, 242, 0.12)"
+                : "none",
+            }}
+          />
+          {isEnabled ? "Ready" : "Standby"}
+        </span>
       </footer>
     </div>
   );

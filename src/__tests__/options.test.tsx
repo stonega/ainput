@@ -16,8 +16,21 @@ const configuredModel = {
 describe("Options model settings", () => {
   let storageSet: jest.Mock;
   let storedSettings: Record<string, unknown>;
+  let originalFetch: typeof global.fetch;
 
   beforeEach(() => {
+    originalFetch = global.fetch;
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [
+          {
+            id: "openrouter/free",
+            name: "Free Models Router",
+          },
+        ],
+      }),
+    }) as jest.Mock;
     storageSet = jest.fn((_items, callback) => callback?.());
     storedSettings = {
       models: [configuredModel],
@@ -48,6 +61,7 @@ describe("Options model settings", () => {
 
   afterEach(() => {
     jest.restoreAllMocks();
+    global.fetch = originalFetch;
   });
 
   test("edits and persists a configured model", async () => {
@@ -213,10 +227,13 @@ describe("Options model settings", () => {
     await waitFor(() =>
       expect(storageSet).toHaveBeenCalledWith(
         expect.objectContaining({
-          activeModelId: "grok-free",
+          activeModelId: "openrouter-free",
           models: expect.arrayContaining([
             expect.objectContaining({ id: "chrome-built-in-ai" }),
-            expect.objectContaining({ id: "grok-free" }),
+            expect.objectContaining({
+              id: "openrouter-free",
+              model: "openrouter/free",
+            }),
           ]),
         })
       )
@@ -225,6 +242,64 @@ describe("Options model settings", () => {
       await screen.findByRole("button", { name: "Download & Use" })
     ).toBeEnabled();
     expect(chromeAI.setupChromeAI).not.toHaveBeenCalled();
+  });
+
+  test("migrates legacy free presets into one refreshed OpenRouter model", async () => {
+    storedSettings = {
+      models: [
+        {
+          id: "grok-free",
+          name: "Grok 4.1 Fast (Free)",
+          apiKey: "",
+          type: "openrouter",
+          baseUrl: "https://openrouter.ai/api",
+          model: "x-ai/grok-4.1-fast:free",
+        },
+        {
+          id: "gpt-oss-free",
+          name: "GPT OSS 20B (Free)",
+          apiKey: "",
+          type: "openrouter",
+          baseUrl: "https://openrouter.ai/api",
+          model: "openai/gpt-oss-20b:free",
+        },
+        {
+          id: "deepseek-r1-free",
+          name: "DeepSeek R1 (Free)",
+          apiKey: "",
+          type: "openrouter",
+          baseUrl: "https://openrouter.ai/api",
+          model: "deepseek/deepseek-r1-0528:free",
+        },
+      ],
+      activeModelId: "gpt-oss-free",
+      modelsInitialized: true,
+      targetLanguage: "English",
+      disabledSites: [],
+    };
+
+    render(<Options />);
+
+    await waitFor(() =>
+      expect(storageSet).toHaveBeenCalledWith({
+        modelsInitialized: true,
+        activeModelId: "openrouter-free",
+        models: [
+          expect.objectContaining({
+            id: "openrouter-free",
+            name: "OpenRouter Free",
+            model: "openrouter/free",
+          }),
+        ],
+      })
+    );
+    expect(
+      await screen.findByRole("radio", { name: "OpenRouter Free" })
+    ).toBeChecked();
+    expect(global.fetch).toHaveBeenCalledWith(
+      "https://openrouter.ai/api/v1/models",
+      { headers: { Accept: "application/json" } }
+    );
   });
 
   test("downloads and activates Chrome Built-in AI from the empty state", async () => {

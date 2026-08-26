@@ -34,6 +34,13 @@ import {
   normalizeCustomActions,
   validateCustomActions,
 } from "./custom-actions";
+import {
+  FALLBACK_OPENROUTER_FREE_MODEL,
+  fetchOpenRouterFreeModel,
+  LEGACY_OPENROUTER_FREE_MODEL_IDS,
+  OPENROUTER_FREE_MODEL_ID,
+  OpenRouterFreeModelMetadata,
+} from "./openrouter-models";
 
 // --- Types ---
 
@@ -81,32 +88,61 @@ const CHROME_AI_MODEL: Model = {
   model: "gemini-nano",
 };
 
-const createFreeModels = (): Model[] => [
-  {
-    id: "grok-free",
-    name: "Grok 4.1 Fast (Free)",
-    apiKey: FREE_OPENROUTER_API_KEY,
-    type: "openrouter",
-    baseUrl: "https://openrouter.ai/api",
-    model: "x-ai/grok-4.1-fast:free",
-  },
-  {
-    id: "gpt-oss-free",
-    name: "GPT OSS 20B (Free)",
-    apiKey: FREE_OPENROUTER_API_KEY,
-    type: "openrouter",
-    baseUrl: "https://openrouter.ai/api",
-    model: "openai/gpt-oss-20b:free",
-  },
-  {
-    id: "deepseek-r1-free",
-    name: "DeepSeek R1 (Free)",
-    apiKey: FREE_OPENROUTER_API_KEY,
-    type: "openrouter",
-    baseUrl: "https://openrouter.ai/api",
-    model: "deepseek/deepseek-r1-0528:free",
-  },
-];
+const createOpenRouterFreeModel = (
+  metadata: OpenRouterFreeModelMetadata = FALLBACK_OPENROUTER_FREE_MODEL
+): Model => ({
+  id: OPENROUTER_FREE_MODEL_ID,
+  name: metadata.name,
+  apiKey: FREE_OPENROUTER_API_KEY,
+  type: "openrouter",
+  baseUrl: "https://openrouter.ai/api",
+  model: metadata.model,
+});
+
+const isManagedOpenRouterFreeModel = (modelId: string): boolean =>
+  modelId === OPENROUTER_FREE_MODEL_ID ||
+  LEGACY_OPENROUTER_FREE_MODEL_IDS.has(modelId);
+
+const reconcileOpenRouterFreeModel = (
+  models: Model[],
+  activeModelId: string | null,
+  refreshedMetadata: OpenRouterFreeModelMetadata | null
+): {
+  models: Model[];
+  activeModelId: string | null;
+  changed: boolean;
+} => {
+  const firstManagedIndex = models.findIndex((model) =>
+    isManagedOpenRouterFreeModel(model.id)
+  );
+  if (firstManagedIndex === -1) {
+    return { models, activeModelId, changed: false };
+  }
+
+  const existingManagedModel = models.find(
+    (model) => model.id === OPENROUTER_FREE_MODEL_ID
+  );
+  const managedModel = refreshedMetadata
+    ? createOpenRouterFreeModel(refreshedMetadata)
+    : existingManagedModel || createOpenRouterFreeModel();
+  const reconciledModels = models.filter(
+    (model) => !isManagedOpenRouterFreeModel(model.id)
+  );
+  reconciledModels.splice(firstManagedIndex, 0, managedModel);
+
+  const reconciledActiveModelId =
+    activeModelId && isManagedOpenRouterFreeModel(activeModelId)
+      ? OPENROUTER_FREE_MODEL_ID
+      : activeModelId;
+
+  return {
+    models: reconciledModels,
+    activeModelId: reconciledActiveModelId,
+    changed:
+      JSON.stringify(reconciledModels) !== JSON.stringify(models) ||
+      reconciledActiveModelId !== activeModelId,
+  };
+};
 
 const MODEL_PROVIDERS: Array<{
   value: ConfigurableModelType;
@@ -335,23 +371,40 @@ export const Options = () => {
         customActions: [],
       },
       async (items) => {
-        let availability: ChromeAIAvailability = "unsupported";
-        try {
-          availability = await getChromeAIAvailability();
-        } catch {
-          availability = "unsupported";
-        }
+        const originalStoredModels = Array.isArray(items.models)
+          ? (items.models as Model[])
+          : [];
+        const shouldRefreshOpenRouterFreeModel =
+          (!items.modelsInitialized && originalStoredModels.length === 0) ||
+          originalStoredModels.some((model) =>
+            isManagedOpenRouterFreeModel(model.id)
+          );
+        const [availability, refreshedFreeModelMetadata] = await Promise.all([
+          getChromeAIAvailability().catch(
+            (): ChromeAIAvailability => "unsupported"
+          ),
+          shouldRefreshOpenRouterFreeModel
+            ? fetchOpenRouterFreeModel()
+            : Promise.resolve(null),
+        ]);
 
         if (cancelled) return;
         setChromeAIAvailability(availability);
 
-        if (items.models && items.models.length > 0) {
-          const storedModels = items.models as Model[];
+        if (originalStoredModels.length > 0) {
+          const reconciled = reconcileOpenRouterFreeModel(
+            originalStoredModels,
+            typeof items.activeModelId === "string"
+              ? items.activeModelId
+              : null,
+            refreshedFreeModelMetadata
+          );
+          const storedModels = reconciled.models;
           const storedActiveModelExists = storedModels.some(
-            (model) => model.id === items.activeModelId
+            (model) => model.id === reconciled.activeModelId
           );
           const storedActiveModel = storedModels.find(
-            (model) => model.id === items.activeModelId
+            (model) => model.id === reconciled.activeModelId
           );
           const chromeAINotReady =
             storedActiveModel?.type === "chrome" &&
@@ -362,33 +415,38 @@ export const Options = () => {
           const nextActiveModelId = chromeAINotReady
             ? fallbackModel?.id || null
             : storedActiveModelExists
-            ? items.activeModelId
+            ? reconciled.activeModelId
             : storedModels[0].id;
 
           setModels(storedModels);
           setActiveModelId(nextActiveModelId);
 
           if (
+            reconciled.changed ||
             !items.modelsInitialized ||
             !storedActiveModelExists ||
             chromeAINotReady
           ) {
-            chrome.storage.sync.set({
+            const storageUpdates: Record<string, unknown> = {
               modelsInitialized: true,
               activeModelId: nextActiveModelId,
-            });
+            };
+            if (reconciled.changed) {
+              storageUpdates.models = storedModels;
+            }
+            chrome.storage.sync.set(storageUpdates);
           }
         } else if (!items.modelsInitialized) {
-          const freeModels = createFreeModels();
+          const freeModel = createOpenRouterFreeModel(
+            refreshedFreeModelMetadata || FALLBACK_OPENROUTER_FREE_MODEL
+          );
           const canOfferChromeAI =
             availability !== "unsupported" && availability !== "unavailable";
           const initialModels = canOfferChromeAI
-            ? [{ ...CHROME_AI_MODEL }, ...freeModels]
-            : freeModels;
+            ? [{ ...CHROME_AI_MODEL }, freeModel]
+            : [freeModel];
           const initialActiveId =
-            availability === "available"
-              ? CHROME_AI_MODEL_ID
-              : freeModels[0]?.id || null;
+            availability === "available" ? CHROME_AI_MODEL_ID : freeModel.id;
 
           setModels(initialModels);
           setActiveModelId(initialActiveId);
