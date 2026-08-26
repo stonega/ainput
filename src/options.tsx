@@ -18,6 +18,7 @@ import {
   FaTimes,
   FaStar,
   FaBolt,
+  FaSyncAlt,
 } from "react-icons/fa";
 import { getTokenUsage } from "./db";
 import { theme, GlobalStyles } from "./theme";
@@ -329,6 +330,8 @@ export const Options = () => {
   const [editingModelId, setEditingModelId] = useState<string | null>(null);
   const [editingModel, setEditingModel] = useState<Model | null>(null);
   const [modelsLoaded, setModelsLoaded] = useState(false);
+  const [refreshingOpenRouterFreeModel, setRefreshingOpenRouterFreeModel] =
+    useState(false);
   const [chromeAIAvailability, setChromeAIAvailability] = useState<
     ChromeAIAvailability | "checking"
   >("checking");
@@ -542,6 +545,8 @@ export const Options = () => {
   };
 
   const startEditingModel = (model: Model) => {
+    if (model.id === OPENROUTER_FREE_MODEL_ID) return;
+
     setEditingModelId(model.id);
     setEditingModel({ ...model });
   };
@@ -558,7 +563,7 @@ export const Options = () => {
   };
 
   const saveEditedModel = () => {
-    if (!editingModel) return;
+    if (!editingModel || editingModel.id === OPENROUTER_FREE_MODEL_ID) return;
 
     const normalizedModel = normalizeModel(editingModel);
     const validationError = validateModel(normalizedModel);
@@ -587,6 +592,44 @@ export const Options = () => {
         showStatus("Model updated successfully!");
       }
     );
+  };
+
+  const refreshOpenRouterFreeModel = async () => {
+    if (refreshingOpenRouterFreeModel) return;
+
+    setRefreshingOpenRouterFreeModel(true);
+    try {
+      const refreshedMetadata = await fetchOpenRouterFreeModel();
+      if (!refreshedMetadata) {
+        showStatus(
+          "Unable to refresh OpenRouter Free. Try again later.",
+          "error"
+        );
+        return;
+      }
+
+      const refreshedModel = createOpenRouterFreeModel(refreshedMetadata);
+      const updatedModels = models.map((model) =>
+        model.id === OPENROUTER_FREE_MODEL_ID ? refreshedModel : model
+      );
+
+      await setSyncStorage({
+        models: updatedModels,
+        modelsInitialized: true,
+      });
+      setModels(updatedModels);
+      cancelEditingModel();
+      showStatus("OpenRouter Free refreshed successfully!");
+    } catch (error) {
+      showStatus(
+        error instanceof Error
+          ? error.message
+          : "Unable to refresh OpenRouter Free.",
+        "error"
+      );
+    } finally {
+      setRefreshingOpenRouterFreeModel(false);
+    }
   };
 
   const enableChromeAI = async () => {
@@ -1312,8 +1355,36 @@ export const Options = () => {
                               flex: "0 0 auto",
                             }}
                           >
-                            {model.type !== "chrome" && (
+                            {model.id === OPENROUTER_FREE_MODEL_ID ? (
                               <button
+                                type="button"
+                                className="btn-icon transition-all"
+                                onClick={refreshOpenRouterFreeModel}
+                                disabled={refreshingOpenRouterFreeModel}
+                                title="Refresh OpenRouter Free"
+                                aria-label="Refresh OpenRouter Free"
+                                style={{
+                                  border: "none",
+                                  background: "transparent",
+                                  color: refreshingOpenRouterFreeModel
+                                    ? theme.colors.primary
+                                    : theme.colors.textSecondary,
+                                  cursor: refreshingOpenRouterFreeModel
+                                    ? "wait"
+                                    : "pointer",
+                                  opacity: refreshingOpenRouterFreeModel
+                                    ? 0.65
+                                    : 1,
+                                  padding: "8px",
+                                  borderRadius: "50%",
+                                  display: "flex",
+                                }}
+                              >
+                                <FaSyncAlt />
+                              </button>
+                            ) : model.type !== "chrome" ? (
+                              <button
+                                type="button"
                                 className="btn-icon transition-all"
                                 onClick={() => startEditingModel(model)}
                                 title="Edit Model"
@@ -1333,7 +1404,7 @@ export const Options = () => {
                               >
                                 <FaEdit />
                               </button>
-                            )}
+                            ) : null}
                             <button
                               className="btn-danger transition-all"
                               onClick={() => deleteModel(model.id)}
@@ -1355,6 +1426,7 @@ export const Options = () => {
                         </div>
 
                         {model.type !== "chrome" &&
+                          model.id !== OPENROUTER_FREE_MODEL_ID &&
                           editingModelId === model.id &&
                           editingModel && (
                             <form

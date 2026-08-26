@@ -296,10 +296,81 @@ describe("Options model settings", () => {
     expect(
       await screen.findByRole("radio", { name: "OpenRouter Free" })
     ).toBeChecked();
+    expect(
+      screen.queryByRole("button", { name: "Edit OpenRouter Free" })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Refresh OpenRouter Free" })
+    ).toBeEnabled();
     expect(global.fetch).toHaveBeenCalledWith(
       "https://openrouter.ai/api/v1/models",
       { headers: { Accept: "application/json" } }
     );
+  });
+
+  test("refreshes the read-only OpenRouter free model", async () => {
+    storedSettings = {
+      models: [
+        {
+          id: "openrouter-free",
+          name: "OpenRouter Free",
+          apiKey: "",
+          type: "openrouter",
+          baseUrl: "https://openrouter.ai/api",
+          model: "openrouter/free",
+        },
+      ],
+      activeModelId: "openrouter-free",
+      modelsInitialized: true,
+      targetLanguage: "English",
+      disabledSites: [],
+    };
+
+    render(<Options />);
+
+    const refreshButton = await screen.findByRole("button", {
+      name: "Refresh OpenRouter Free",
+    });
+    storageSet.mockClear();
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        data: [
+          {
+            id: "provider/refreshed:free",
+            name: "Refreshed Free",
+            context_length: 128000,
+            pricing: { prompt: "0", completion: "0" },
+            architecture: { output_modalities: ["text"] },
+          },
+        ],
+      }),
+    });
+
+    fireEvent.click(refreshButton);
+
+    await waitFor(() =>
+      expect(storageSet).toHaveBeenCalledWith(
+        {
+          models: [
+            expect.objectContaining({
+              id: "openrouter-free",
+              name: "Refreshed Free",
+              model: "provider/refreshed:free",
+            }),
+          ],
+          modelsInitialized: true,
+        },
+        expect.any(Function)
+      )
+    );
+    expect(await screen.findByText("Refreshed Free")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Edit Refreshed Free" })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("OpenRouter Free refreshed successfully!")
+    ).toBeInTheDocument();
   });
 
   test("downloads and activates Chrome Built-in AI from the empty state", async () => {

@@ -19,6 +19,8 @@ This changelog is organized by the extension version declared in
 - Consolidated the three hard-coded OpenRouter free presets into one managed
   preset that refreshes from OpenRouter's models API and falls back to the
   stable free-model router when the API is unavailable.
+- Made the managed OpenRouter Free preset read-only while retaining automatic
+  refresh and adding an explicit refresh control in model settings.
 - Redesigned the popup to match the settings page visual system and make the
   current site's AInput status easier to scan with compact, text-only rows.
 
